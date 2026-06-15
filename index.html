@@ -111,8 +111,20 @@
   .sheet.page{top:0; bottom:0; height:100%; max-height:100%; border-radius:0; padding:0 20px}
   .sheet.page .grab{display:none}
   .page-foot{position:sticky; bottom:0; background:#fff; margin:16px -20px 0;
-    padding:12px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line)}
-  .page-foot .save-btn{margin-top:0}
+    padding:12px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);
+    display:flex; gap:10px}
+  .page-foot .save-btn{flex:1; margin-top:0}
+  .foot-secondary{flex:1; padding:15px; border:1px solid #f2d6d2; border-radius:12px;
+    background:#fff; color:var(--red); font-size:16px; font-weight:700; cursor:pointer}
+  .page-head-actions{display:flex; align-items:center; gap:6px}
+  .page-icon{border:none; background:none; font-size:24px; line-height:1; color:var(--muted); cursor:pointer; padding:0 6px}
+  .page-menu{position:absolute; top:calc(100% - 4px); right:14px; min-width:170px; background:#fff;
+    border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.14);
+    display:none; z-index:5; overflow:hidden}
+  .page-menu.open{display:block}
+  .page-menu button{display:block; width:100%; text-align:left; padding:13px 14px; border:none;
+    background:none; font-size:14px; font-weight:600; color:var(--ink); cursor:pointer}
+  .page-menu button:active{background:#f2f4f2}
   .page-head{position:sticky; top:0; z-index:3; background:#fff; display:flex; align-items:center;
     justify-content:space-between; margin:0 -20px 8px; padding:calc(env(safe-area-inset-top) + 12px) 20px 12px;
     border-bottom:1px solid var(--line)}
@@ -299,7 +311,17 @@
 
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
 <div class="sheet page" id="sheet">
-  <div class="page-head"><h2 id="sheet-title">Add item</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">×</button></div>
+  <div class="page-head">
+    <h2 id="sheet-title">Add item</h2>
+    <div class="page-head-actions">
+      <button id="page-menu-btn" class="page-icon" style="display:none" onclick="togglePageMenu(event)" aria-label="More actions">⋮</button>
+      <button class="page-close" onclick="closeSheet()" aria-label="Close">×</button>
+    </div>
+    <div class="page-menu" id="page-menu">
+      <button id="m-watch" onclick="addToWatchlist()">Add to watchlist</button>
+      <button id="m-notmatch" onclick="notAMatch()">Not a match</button>
+    </div>
+  </div>
 
   <label>Type</label>
   <div class="seg" id="seg-kind" style="margin-top:2px">
@@ -390,10 +412,10 @@
 
   <div id="price-history"></div>
 
-  <button id="notmatch-btn" style="display:none" onclick="notAMatch()">Not a match — remove this deal</button>
-  <button id="watch-btn" style="display:none" onclick="addToWatchlist()">Add to watchlist</button>
-  <button id="delete-btn" style="display:none" onclick="deleteCurrent()">Delete item</button>
-  <div class="page-foot"><button class="save-btn" id="save-btn" onclick="saveItem()">Save</button></div>
+  <div class="page-foot">
+    <button id="delete-btn" class="foot-secondary" style="display:none" onclick="deleteCurrent()">Delete</button>
+    <button class="save-btn" id="save-btn" onclick="saveItem()">Save</button>
+  </div>
 </div>
 
 <!-- Add chooser sheet -->
@@ -914,8 +936,8 @@ function openSheet(){
   document.getElementById('f-category').value='';
   renderPriceHistory(null);
   document.getElementById('delete-btn').style.display='none';
-  document.getElementById('watch-btn').style.display='none';
-  document.getElementById('notmatch-btn').style.display='none';
+  document.getElementById('page-menu-btn').style.display='none';
+  document.getElementById('page-menu').classList.remove('open');
   showSheet();
 }
 function editItem(id){
@@ -940,10 +962,14 @@ function editItem(id){
   document.getElementById('f-category').value=i.category||'';
   renderPriceHistory(i);
   document.getElementById('delete-btn').style.display='block';
-  document.getElementById('watch-btn').style.display = i.kind==='purchase' ? 'block' : 'none';
-  document.getElementById('notmatch-btn').style.display = i.deal ? 'block' : 'none';
+  const canWatch = i.kind==='purchase', canNot = !!i.deal;
+  document.getElementById('m-watch').style.display = canWatch ? 'block' : 'none';
+  document.getElementById('m-notmatch').style.display = canNot ? 'block' : 'none';
+  document.getElementById('page-menu-btn').style.display = (canWatch||canNot) ? 'block' : 'none';
+  document.getElementById('page-menu').classList.remove('open');
   showSheet();
 }
+function togglePageMenu(ev){ ev.stopPropagation(); document.getElementById('page-menu').classList.toggle('open'); }
 function showSheetEl(id){
   document.body.classList.add('modal-open');
   document.getElementById('scrim').classList.add('open');
@@ -1339,7 +1365,8 @@ async function findDeal(item, postal){
     if(sizeTok && (r.name||'').toLowerCase().replace(/[^a-z0-9]/g,'').includes(sizeTok)) r._score+=0.15;
   });
   cands.sort((a,b)=> b._score-a._score);
-  // Confirm by Costco item number when we have one: check detail on the top few candidates.
+  const isCostco = item.store==='Costco';
+  // Costco: confirm by item # (exact match by SKU on the flyer).
   if(item.code){
     for(const r of cands.slice(0,3)){
       try{
@@ -1347,9 +1374,13 @@ async function findDeal(item, postal){
         if(det.sku && det.sku===String(item.code).trim()) return dealFrom(r, true);
       }catch(e){}
     }
+    // You gave an item # but it isn't on the flyer → the item isn't on sale. Don't guess by name.
+    if(isCostco) return null;
   }
-  // Fall back to best name match.
-  return cands[0]._score>=0.5 ? dealFrom(cands[0], false) : null;
+  // Name-only fallback. Costco needs near-certainty (no SKU to confirm it's the same product);
+  // T&T has no SKU, so name matching is all we have and stays lax.
+  const threshold = isCostco ? 0.8 : 0.5;
+  return cands[0]._score>=threshold ? dealFrom(cands[0], false) : null;
 }
 function qualifies(item, deal){
   if(!deal) return false;
@@ -1481,7 +1512,7 @@ function installAppIcon(){
     m.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(man)); document.head.appendChild(m);
   }catch(e){}
 }
-document.addEventListener('click', ()=> document.querySelectorAll('.card-menu.open').forEach(x=>x.classList.remove('open')));
+document.addEventListener('click', ()=> document.querySelectorAll('.card-menu.open, .page-menu.open').forEach(x=>x.classList.remove('open')));
 installAppIcon();
 probeStorage();
 updateStorageWarning();
