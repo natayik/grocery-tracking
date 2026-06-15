@@ -223,6 +223,8 @@
   .days-pill.urgent{background:#fbe9e7; color:var(--red)}
   .card-main > *:last-child{margin-bottom:0}
   .rename-banner .link-btn{color:#7a5b00}
+  #notmatch-btn{width:100%; margin-top:10px; padding:13px; border:1px solid var(--line);
+    border-radius:12px; background:#fff; color:var(--muted); font-size:15px; font-weight:700; cursor:pointer}
   #watch-btn{width:100%; margin-top:10px; padding:13px; border:1px solid var(--brand);
     border-radius:12px; background:#fff; color:var(--brand); font-size:15px; font-weight:700; cursor:pointer}
   #delete-btn{width:100%; margin-top:10px; padding:13px; border:1px solid #f2d6d2;
@@ -299,6 +301,7 @@
 <div class="sheet page" id="sheet">
   <div class="page-head"><h2 id="sheet-title">Add item</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">×</button></div>
 
+  <label>Type</label>
   <div class="seg" id="seg-kind" style="margin-top:2px">
     <button data-kind="purchase" class="sel" onclick="setKind('purchase')">Purchase</button>
     <button data-kind="watch" onclick="setKind('watch')">Watchlist</button>
@@ -310,6 +313,9 @@
   <label>Item name</label>
   <input id="f-name" placeholder="e.g. Kirkland Peanut Butter" autocomplete="off">
 
+  <label>Size (Optional)</label>
+  <input id="f-size" placeholder="e.g. 500 g or 24-pack" autocomplete="off">
+
   <label>Photo (Optional)</label>
   <div class="img-control" id="img-control"></div>
   <input type="file" id="img-file" accept="image/*" style="display:none" onchange="onFormImagePicked(event)">
@@ -319,38 +325,40 @@
     <input id="f-code" inputmode="numeric" placeholder="e.g. 1234567" autocomplete="off">
   </div>
 
+  <!-- Purchase only: scan helper + purchase date (before the price row) -->
+  <div id="purchase-top">
+    <button type="button" class="img-btn" style="margin-top:6px" onclick="scanLabelIntoForm()">📷 Scan label to fill</button>
+    <span id="label-scan-status" class="hint"></span>
+    <label>Purchased date</label>
+    <input id="f-date" type="date">
+    <div class="hint">The 30‑day claim window counts from this date.</div>
+  </div>
+
+  <!-- Main price row: companion is Quantity (purchase) or Per (watchlist) -->
   <div class="two">
     <div>
       <label id="lbl-price">Price paid ($)</label>
       <input id="f-price" type="number" inputmode="decimal" step="0.01" placeholder="0.00">
     </div>
     <div id="qty-wrap">
-      <label>Qty</label>
+      <label>Quantity</label>
       <input id="f-qty" type="number" inputmode="numeric" value="1" min="1">
+    </div>
+    <div id="watchper-wrap" style="display:none">
+      <label>Per</label>
+      <select id="f-unit">
+        <option value="each">each</option>
+        <option value="100g">100 g</option>
+        <option value="kg">kg</option>
+        <option value="lb">lb</option>
+        <option value="L">litre</option>
+        <option value="g">g</option>
+      </select>
     </div>
   </div>
 
-  <div id="unit-field" style="display:none">
-    <label>Per</label>
-    <select id="f-unit" onchange="updateQtyVisibility()">
-      <option value="each">each</option>
-      <option value="100g">100 g</option>
-      <option value="kg">kg</option>
-      <option value="lb">lb</option>
-      <option value="L">litre</option>
-      <option value="g">g</option>
-    </select>
-  </div>
-
-  <label>Size (Optional)</label>
-  <input id="f-size" placeholder="e.g. 500 g or 24-pack" autocomplete="off">
-
-  <div id="purchase-fields">
-    <button type="button" class="img-btn" style="margin-top:6px" onclick="scanLabelIntoForm()">📷 Scan label to fill</button>
-    <span id="label-scan-status" class="hint"></span>
-    <label>Purchase date</label>
-    <input id="f-date" type="date">
-    <div class="hint">The 30‑day claim window counts from this date.</div>
+  <!-- Purchase only: optional unit price + discount (after the price row) -->
+  <div id="purchase-bottom">
     <div class="two">
       <div>
         <label>Price per unit (Optional)</label>
@@ -368,20 +376,21 @@
         </select>
       </div>
     </div>
+    <label>Discount (Optional)</label>
+    <input id="f-discount" type="number" inputmode="decimal" step="0.01" placeholder="0.00">
   </div>
 
-  <div id="watch-fields" style="display:none">
-    <label>Notes (Optional)</label>
-    <textarea id="f-notes" placeholder="e.g. wait until under $12, or 'buy 2 when on sale'"></textarea>
-    <label>Link (Optional)</label>
-    <input id="f-link" type="url" inputmode="url" placeholder="https://…" autocomplete="off">
-  </div>
+  <label>Notes (Optional)</label>
+  <textarea id="f-notes" placeholder="e.g. wait until under $12, or 'buy 2 when on sale'"></textarea>
+  <label>Link (Optional)</label>
+  <input id="f-link" type="url" inputmode="url" placeholder="https://…" autocomplete="off">
 
   <label>Category</label>
   <select id="f-category"></select>
 
   <div id="price-history"></div>
 
+  <button id="notmatch-btn" style="display:none" onclick="notAMatch()">Not a match — remove this deal</button>
   <button id="watch-btn" style="display:none" onclick="addToWatchlist()">Add to watchlist</button>
   <button id="delete-btn" style="display:none" onclick="deleteCurrent()">Delete item</button>
   <div class="page-foot"><button class="save-btn" id="save-btn" onclick="saveItem()">Save</button></div>
@@ -634,7 +643,8 @@ function addToWatchlist(){
   if(dup){ closeSheet(); activeTab='watchlist'; switchTab('watchlist'); return; }
   const w={
     id:uid(), kind:'watch', store:p.store, name:p.name, code:p.code||'',
-    price:p.price||0, priceUnit:'each', qty:1, date:todayISO(), notes:'', link:'',
+    price:p.price||0, priceUnit:'each', qty:1, date:todayISO(),
+    notes:p.notes||'', link:p.link||'', size:p.size||'',
     category:p.category||'', priceDate:todayISO(),
     priceHistory: p.price>0 ? [{price:p.price, date:todayISO()}] : []
   };
@@ -643,6 +653,14 @@ function addToWatchlist(){
   save(); closeSheet();
   activeTab='watchlist'; switchTab('watchlist');
   ensureCategories();
+}
+function notAMatch(){
+  if(!editId) return;
+  const i=state.items.find(x=>x.id===editId); if(!i || !i.deal) return;
+  i.rejectedFlyers = i.rejectedFlyers || [];
+  if(i.deal.flyerName && !i.rejectedFlyers.includes(i.deal.flyerName)) i.rejectedFlyers.push(i.deal.flyerName);
+  i.deal = null;
+  save(); closeSheet(); render();
 }
 function deleteCurrent(){
   if(!editId) return;
@@ -858,18 +876,15 @@ function sectionHead(text, sale){
 // ---- Sheet ----
 function setKind(k){
   form.kind=k;
+  const isP = k==='purchase';
   document.querySelectorAll('#seg-kind button').forEach(b=>b.classList.toggle('sel', b.dataset.kind===k));
-  document.getElementById('purchase-fields').style.display = k==='purchase'?'block':'none';
-  document.getElementById('watch-fields').style.display = k==='watch'?'block':'none';
-  document.getElementById('unit-field').style.display = k==='watch'?'block':'none';
-  document.getElementById('lbl-price').textContent = k==='purchase'?'Price paid ($)':'Regular price ($)';
-  updateQtyVisibility();
+  document.getElementById('purchase-top').style.display = isP?'block':'none';
+  document.getElementById('purchase-bottom').style.display = isP?'block':'none';
+  document.getElementById('qty-wrap').style.display = isP?'block':'none';
+  document.getElementById('watchper-wrap').style.display = isP?'none':'block';
+  document.getElementById('lbl-price').textContent = isP?'Price paid ($)':'Regular price ($)';
 }
-function updateQtyVisibility(){
-  const unit=document.getElementById('f-unit').value;
-  const hide = (form.kind==='watch' && unit!=='each');
-  document.getElementById('qty-wrap').style.display = hide ? 'none' : 'block';
-}
+function updateQtyVisibility(){} // quantity is purchase-only and always shown; kept as a no-op for older callers
 function setStore(s){
   form.store=s;
   document.querySelectorAll('#seg-store button').forEach(b=>b.classList.toggle('sel', b.dataset.store===s));
@@ -893,12 +908,14 @@ function openSheet(){
   document.getElementById('f-unitprice').value='';
   document.getElementById('f-punit').value='each';
   document.getElementById('f-size').value='';
+  document.getElementById('f-discount').value='';
   formImage='keep'; renderImgControl();
   document.getElementById('label-scan-status').textContent='';
   document.getElementById('f-category').value='';
   renderPriceHistory(null);
   document.getElementById('delete-btn').style.display='none';
   document.getElementById('watch-btn').style.display='none';
+  document.getElementById('notmatch-btn').style.display='none';
   showSheet();
 }
 function editItem(id){
@@ -917,13 +934,14 @@ function editItem(id){
   document.getElementById('f-unitprice').value=i.unitPrice||'';
   document.getElementById('f-punit').value=i.unit||'each';
   document.getElementById('f-size').value=i.size||'';
+  document.getElementById('f-discount').value=i.discount||'';
   formImage='keep'; renderImgControl();
   document.getElementById('label-scan-status').textContent='';
   document.getElementById('f-category').value=i.category||'';
   renderPriceHistory(i);
   document.getElementById('delete-btn').style.display='block';
   document.getElementById('watch-btn').style.display = i.kind==='purchase' ? 'block' : 'none';
-  updateQtyVisibility();
+  document.getElementById('notmatch-btn').style.display = i.deal ? 'block' : 'none';
   showSheet();
 }
 function showSheetEl(id){
@@ -957,10 +975,13 @@ function saveItem(){
   if(form.kind==='purchase'){
     rec.unitPrice = parseFloat(document.getElementById('f-unitprice').value)||0;
     rec.unit = document.getElementById('f-punit').value;
+    rec.discount = parseFloat(document.getElementById('f-discount').value)||0;
   } else {
     rec.priceUnit = document.getElementById('f-unit').value;
   }
   const prev = editId ? state.items.find(x=>x.id===editId) : null;
+  // Preserve the live deal + any rejected-match memory across edits.
+  if(prev){ if(prev.deal) rec.deal=prev.deal; if(prev.rejectedFlyers) rec.rejectedFlyers=prev.rejectedFlyers; }
   const priceChanged = !prev || prev.price!==rec.price;
   rec.priceDate = (prev && !priceChanged && prev.priceDate) ? prev.priceDate : todayISO();
   rec.priceHistory = (prev && prev.priceHistory) ? prev.priceHistory.slice() : [];
@@ -1268,9 +1289,13 @@ const KEY_POSTAL='groceryTracker.postal';
 function getPostal(){ try{ return (localStorage.getItem(KEY_POSTAL)||'').replace(/\s+/g,'').toUpperCase(); }catch(e){ return ''; } }
 let dealsChecking=false;
 function qTokens(s){ return (s||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(w=>w.length>=3); }
+// Generic words that shouldn't drive a match (so "whole tenderloin" doesn't match "...whole bean coffee").
+const STOPWORDS=new Set(['whole','signature','kirkland','organic','fresh','natural','original','value','pack','count','large','small','family','select','classic','premium','brand','with','and','the','plus','free','low','new']);
+function contentTokens(s){ return qTokens(s).filter(w=>!STOPWORDS.has(w)); }
 function nameScore(itemName, flyerName){
-  const a=qTokens(itemName); if(!a.length) return 0;
-  const b=new Set(qTokens(flyerName));
+  // Score on distinctive (non-generic) words only; require a real overlap.
+  const a=contentTokens(itemName); if(!a.length) return 0;
+  const b=new Set(contentTokens(flyerName));
   return a.filter(w=>b.has(w)).length / a.length;
 }
 async function flippSearch(term, postal){
@@ -1292,14 +1317,18 @@ function dealFrom(r, exact){
 async function findDeal(item, postal){
   const merch = STORES[item.store] && STORES[item.store].flipp;
   const now=Date.now();
-  const toks=qTokens(item.name);
-  // Flipp AND-matches query words, so query broadly (first 1-2 tokens) and narrow with our own scoring.
+  // Query by distinctive words first (skip generic ones like "whole"); fall back to raw tokens if none.
+  const ctoks=contentTokens(item.name);
+  const toks=ctoks.length ? ctoks : qTokens(item.name);
   const queries=[...new Set([ toks.slice(0,2).join(' '), toks[0], sortKey(item.name)||item.name ].filter(Boolean))];
+  const rejected=new Set((item.rejectedFlyers||[]).map(s=>(s||'').toLowerCase()));
   let cands=[];
   for(const q of queries){
     let results;
     try{ results=await flippSearch(q, postal); }catch(e){ continue; }
-    cands = results.filter(r=> (!merch||r.merchant_name===merch) && r.current_price>0 && (!r.valid_to||new Date(r.valid_to).getTime()>now));
+    cands = results.filter(r=> (!merch||r.merchant_name===merch) && r.current_price>0
+      && (!r.valid_to||new Date(r.valid_to).getTime()>now)
+      && !rejected.has((r.name||'').toLowerCase()));
     if(cands.length) break;
   }
   if(!cands.length) return null;
