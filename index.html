@@ -141,6 +141,7 @@
   .hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4}
   .toggle-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px}
   .tg-title{font-size:15px; font-weight:600; color:var(--ink)}
+  .notif-err{color:var(--red)}
   .switch{position:relative; display:inline-block; width:46px; height:28px; flex:0 0 auto}
   .switch input{opacity:0; width:0; height:0}
   .slider{position:absolute; inset:0; background:#ccc; border-radius:28px; transition:.2s; cursor:pointer}
@@ -790,11 +791,10 @@ function card(i){
   if(i.deal){
     const cur=i.deal.price;
     const pricier = i.kind==='watch' && i.price>0 && cur > i.price;
-    // Never invent a flyer "original": only strike through a real prior price — what you paid, or the flyer's own original.
-    const realWas = i.kind==='purchase' ? (i.price||0) : (i.deal.original||0);
-    const base = realWas || (i.kind==='watch' ? (i.price||0) : 0); // save math may use your saved price (a real number, not shown as a fake "was")
+    // "Was" = the flyer's original if given, else your saved usual price. No original at all → no crossed price, no Save.
+    const base = i.kind==='purchase' ? (i.price||0) : (i.deal.original || i.price || 0);
     const save = base>cur ? base-cur : 0;
-    priceCol = `<div class="price-wrap">${realWas>0?`<span class="price-was">${fmt$(realWas)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
+    priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
       + (save>0 ? `<span class="save-badge">Save ${fmt$(save)}${usuf}</span>` : '');
     const ends = i.deal.validTo ? `Deal ends ${fmtDate(i.deal.validTo.slice(0,10))}` : '';
     // Date line: purchases pair the buy date with the deal end; whichever deadline binds drives the pill.
@@ -808,6 +808,9 @@ function card(i){
         + `<span class="rename-actions"><button class="link-btn" onclick="event.stopPropagation(); renameToFlyer('${i.id}')">Rename</button>`
         + `<button class="rename-x" onclick="event.stopPropagation(); dismissRename('${i.id}')" aria-label="Dismiss">×</button></span></div>`;
     }
+  } else if(i.kind==='purchase' && i.discount>0){
+    // Pre-discount original crossed out → what you actually paid.
+    priceCol = `<div class="price-wrap"><span class="price-was">${fmt$(i.price + i.discount)}</span><span class="price">${fmt$(i.price)}</span></div>`;
   } else {
     const per = (i.kind==='watch' && usuf) ? ` <span class="per">${usuf}</span>` : '';
     priceCol = i.price>0 ? `<div class="price">${fmt$(i.price)}${per}</div>` : '';
@@ -823,7 +826,6 @@ function card(i){
     if(i.code) meta += `<div class="meta">Item #${esc(i.code)}</div>`;
     // Show the unit price only when it's a real per-weight figure — never a redundant "/ each".
     if(i.unitPrice>0 && usuf) meta += `<div class="meta">${fmt$(i.unitPrice)}${usuf}</div>`;
-    if(i.discount>0) meta += `<div class="meta">incl. ${fmt$(i.discount)} discount</div>`;
   } else {
     if(i.notes) meta += `<div class="meta">${esc(i.notes)}</div>`;
     if(i.link) meta += `<div class="link-row"><a href="${esc(i.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open link ↗</a></div>`;
@@ -1008,7 +1010,7 @@ function urlB64ToUint8Array(b64){
   const raw=atob(s);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
-function setNotifStatus(t){ const st=document.getElementById('notif-status'); if(st) st.textContent=t||''; }
+function setNotifStatus(t, isErr){ const st=document.getElementById('notif-status'); if(!st) return; st.textContent=t||''; st.classList.toggle('notif-err', !!isErr); }
 async function onNotifToggle(on){
   if(on){
     const ok=await enableNotifications();
@@ -1020,13 +1022,13 @@ async function onNotifToggle(on){
 async function enableNotifications(){
   try{
     if(!('serviceWorker' in navigator) || !('PushManager' in window)){
-      setNotifStatus('This browser can’t do push. On iPhone, add the app to your Home Screen and open it from there.'); return false;
+      setNotifStatus('Push isn’t available here — add the app to your Home Screen and open it from there.', true); return false;
     }
-    setNotifStatus('Setting up…');
+    setNotifStatus('');
     const reg=await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
     const perm=await Notification.requestPermission();
-    if(perm!=='granted'){ setNotifStatus('Notifications are blocked — enable them for this app in iOS Settings.'); return false; }
+    if(perm!=='granted'){ setNotifStatus('Notifications are blocked — turn them on for this app in iOS Settings.', true); return false; }
     const vr=await fetch('/.netlify/functions/vapid');
     if(!vr.ok) throw new Error('vapid '+vr.status);
     const { publicKey }=await vr.json();
@@ -1034,9 +1036,9 @@ async function enableNotifications(){
     if(!sub) sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8Array(publicKey) });
     const pr=await fetch('/.netlify/functions/test-push',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({subscription:sub}) });
     if(!pr.ok) throw new Error((await pr.text())||('push '+pr.status));
-    setNotifStatus('On — a test notification should arrive in a moment.');
+    setNotifStatus(''); // success: no message
     return true;
-  }catch(e){ setNotifStatus('Error: '+(e && e.message ? e.message : e)); return false; }
+  }catch(e){ setNotifStatus('Couldn’t enable: '+(e && e.message ? e.message : e), true); return false; }
 }
 async function disableNotifications(){
   try{
@@ -1044,7 +1046,7 @@ async function disableNotifications(){
     const sub=reg && await reg.pushManager.getSubscription();
     if(sub) await sub.unsubscribe();
   }catch(e){}
-  setNotifStatus('Off.');
+  setNotifStatus('');
 }
 async function reflectNotifState(){
   const t=document.getElementById('notif-toggle'); if(!t) return;
