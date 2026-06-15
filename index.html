@@ -139,6 +139,14 @@
   }
   .save-btn:active{background:var(--brand-d)}
   .hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4}
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px}
+  .tg-title{font-size:15px; font-weight:600; color:var(--ink)}
+  .switch{position:relative; display:inline-block; width:46px; height:28px; flex:0 0 auto}
+  .switch input{opacity:0; width:0; height:0}
+  .slider{position:absolute; inset:0; background:#ccc; border-radius:28px; transition:.2s; cursor:pointer}
+  .slider:before{content:""; position:absolute; width:22px; height:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s}
+  .switch input:checked + .slider{background:var(--brand)}
+  .switch input:checked + .slider:before{transform:translateX(18px)}
   .hint a{color:var(--brand); font-weight:600; text-decoration:none}
   .head-actions{position:absolute; top:calc(env(safe-area-inset-top) + 16px); right:16px; display:flex; gap:8px}
   .icon-btn{
@@ -400,8 +408,11 @@
   <button class="save-btn" onclick="saveSettings()">Save</button>
 
   <label style="margin-top:22px">Notifications</label>
-  <button type="button" class="big-btn" style="margin-top:0" onclick="enableNotifications()"><span class="ico">🔔</span> Enable notifications</button>
-  <p class="hint" id="notif-status">Add the app to your Home Screen first (iPhone: Share → Add to Home Screen), then open it from there.</p>
+  <div class="toggle-row">
+    <div class="tg-title">Price-drop alerts</div>
+    <label class="switch"><input type="checkbox" id="notif-toggle" onchange="onNotifToggle(this.checked)"><span class="slider"></span></label>
+  </div>
+  <p class="hint" id="notif-status"></p>
 </div>
 
 <!-- Scan sheet -->
@@ -977,6 +988,7 @@ function getApiKey(){ try{ return localStorage.getItem(KEY_API)||''; }catch(e){ 
 function openSettings(){
   document.getElementById('f-apikey').value=getApiKey();
   try{ document.getElementById('f-postal').value=localStorage.getItem(KEY_POSTAL)||''; }catch(e){}
+  setNotifStatus(''); reflectNotifState();
   showSheetEl('settings-sheet');
 }
 function saveSettings(){
@@ -996,18 +1008,25 @@ function urlB64ToUint8Array(b64){
   const raw=atob(s);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
+function setNotifStatus(t){ const st=document.getElementById('notif-status'); if(st) st.textContent=t||''; }
+async function onNotifToggle(on){
+  if(on){
+    const ok=await enableNotifications();
+    if(!ok){ const t=document.getElementById('notif-toggle'); if(t) t.checked=false; }
+  } else {
+    await disableNotifications();
+  }
+}
 async function enableNotifications(){
-  const st=document.getElementById('notif-status');
-  const set=t=>{ if(st) st.textContent=t; };
   try{
     if(!('serviceWorker' in navigator) || !('PushManager' in window)){
-      set('This browser can’t do push. On iPhone, add the app to your Home Screen and open it from there.'); return;
+      setNotifStatus('This browser can’t do push. On iPhone, add the app to your Home Screen and open it from there.'); return false;
     }
-    set('Setting up…');
+    setNotifStatus('Setting up…');
     const reg=await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
     const perm=await Notification.requestPermission();
-    if(perm!=='granted'){ set('Notifications are blocked — enable them for this app in Settings.'); return; }
+    if(perm!=='granted'){ setNotifStatus('Notifications are blocked — enable them for this app in iOS Settings.'); return false; }
     const vr=await fetch('/.netlify/functions/vapid');
     if(!vr.ok) throw new Error('vapid '+vr.status);
     const { publicKey }=await vr.json();
@@ -1015,8 +1034,26 @@ async function enableNotifications(){
     if(!sub) sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8Array(publicKey) });
     const pr=await fetch('/.netlify/functions/test-push',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({subscription:sub}) });
     if(!pr.ok) throw new Error((await pr.text())||('push '+pr.status));
-    set('Subscribed ✓ — a test notification should arrive in a moment.');
-  }catch(e){ set('Error: '+(e && e.message ? e.message : e)); }
+    setNotifStatus('On — a test notification should arrive in a moment.');
+    return true;
+  }catch(e){ setNotifStatus('Error: '+(e && e.message ? e.message : e)); return false; }
+}
+async function disableNotifications(){
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    const sub=reg && await reg.pushManager.getSubscription();
+    if(sub) await sub.unsubscribe();
+  }catch(e){}
+  setNotifStatus('Off.');
+}
+async function reflectNotifState(){
+  const t=document.getElementById('notif-toggle'); if(!t) return;
+  try{
+    if(!('serviceWorker' in navigator) || Notification.permission!=='granted'){ t.checked=false; return; }
+    const reg=await navigator.serviceWorker.getRegistration();
+    const sub=reg && await reg.pushManager.getSubscription();
+    t.checked=!!sub;
+  }catch(e){ t.checked=false; }
 }
 
 // ---- Scan ----

@@ -5,7 +5,7 @@ import webpush from 'web-push';
 // The keypair is generated once on first call and persisted in Netlify Blobs,
 // so it stays stable (subscriptions are tied to the key used at subscribe time).
 export default async () => {
-  const store = getStore('grocery');
+  const store = getStore({ name: 'grocery', consistency: 'strong' });
   let keys = await store.get('vapid', { type: 'json' });
   if (!keys) {
     keys = webpush.generateVAPIDKeys();

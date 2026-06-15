@@ -10,7 +10,7 @@ export default async (req) => {
   const subscription = body && body.subscription;
   if (!subscription) return new Response('Missing subscription', { status: 400 });
 
-  const store = getStore('grocery');
+  const store = getStore({ name: 'grocery', consistency: 'strong' });
   const keys = await store.get('vapid', { type: 'json' });
   if (!keys) return new Response('VAPID keys not initialised — call /vapid first', { status: 500 });
 
