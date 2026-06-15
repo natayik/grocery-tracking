@@ -398,6 +398,10 @@
   <input id="f-postal" placeholder="e.g. V6X 0V3" autocomplete="off">
   <p class="hint">Used to find your local Costco &amp; T&amp;T flyer deals.</p>
   <button class="save-btn" onclick="saveSettings()">Save</button>
+
+  <label style="margin-top:22px">Notifications</label>
+  <button type="button" class="big-btn" style="margin-top:0" onclick="enableNotifications()"><span class="ico">🔔</span> Enable notifications</button>
+  <p class="hint" id="notif-status">Add the app to your Home Screen first (iPhone: Share → Add to Home Screen), then open it from there.</p>
 </div>
 
 <!-- Scan sheet -->
@@ -983,6 +987,36 @@ function saveSettings(){
   }catch(e){}
   closeSheet();
   if(getPostal() && getPostal()!==hadPostal) checkDeals(); // silent — no "add items" nag on settings save
+}
+
+// ---- Push notifications (Stage 1a: prove the pipe) ----
+function urlB64ToUint8Array(b64){
+  const pad='='.repeat((4 - b64.length % 4) % 4);
+  const s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(s);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function enableNotifications(){
+  const st=document.getElementById('notif-status');
+  const set=t=>{ if(st) st.textContent=t; };
+  try{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+      set('This browser can’t do push. On iPhone, add the app to your Home Screen and open it from there.'); return;
+    }
+    set('Setting up…');
+    const reg=await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ set('Notifications are blocked — enable them for this app in Settings.'); return; }
+    const vr=await fetch('/.netlify/functions/vapid');
+    if(!vr.ok) throw new Error('vapid '+vr.status);
+    const { publicKey }=await vr.json();
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8Array(publicKey) });
+    const pr=await fetch('/.netlify/functions/test-push',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({subscription:sub}) });
+    if(!pr.ok) throw new Error((await pr.text())||('push '+pr.status));
+    set('Subscribed ✓ — a test notification should arrive in a moment.');
+  }catch(e){ set('Error: '+(e && e.message ? e.message : e)); }
 }
 
 // ---- Scan ----
