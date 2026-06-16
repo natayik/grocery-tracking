@@ -1351,32 +1351,32 @@ const ITEM_SCHEMA={type:'object',properties:{
 }, required:['name']};
 
 async function callGemini(images, prompt, schema){
-  const parts=[{text:prompt}];
-  images.forEach(im=>parts.push({inline_data:{mime_type:im.mime,data:im.base64}}));
-  const url=’https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=’+encodeURIComponent(getApiKey());
-  const body={contents:[{parts}], generationConfig:{responseMimeType:’application/json’,responseSchema:schema}};
-  const delays=[0,3000,8000];
-  let res, lastStatus=0;
-  for(let attempt=0; attempt<delays.length; attempt++){
-    if(attempt>0) await new Promise(r=>setTimeout(r,delays[attempt]));
-    try{ res=await fetch(url,{method:’POST’,headers:{‘Content-Type’:’application/json’},body:JSON.stringify(body)}); }
-    catch(e){ throw new Error(‘Network error — check your connection and try again.’); }
+  var parts=[{text:prompt}];
+  images.forEach(function(im){parts.push({inline_data:{mime_type:im.mime,data:im.base64}});});
+  var gemUrl="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(getApiKey());
+  var gemBody={contents:[{parts:parts}], generationConfig:{responseMimeType:"application/json",responseSchema:schema}};
+  var delays=[0,3000,8000];
+  var res, lastStatus=0;
+  for(var attempt=0; attempt<delays.length; attempt++){
+    if(attempt>0) await new Promise(function(r){setTimeout(r,delays[attempt]);});
+    try{ res=await fetch(gemUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(gemBody)}); }
+    catch(e){ throw new Error("Network error \u2014 check your connection and try again."); }
     lastStatus=res.status;
     if(res.status!==429) break;
     if(attempt<delays.length-1) continue;
   }
   if(!res.ok){
-    let msg=String(lastStatus);
-    try{ const j=await res.json(); if(j.error&&j.error.message) msg=j.error.message; }catch(e){}
-    if(lastStatus===400 && /api key/i.test(msg)) throw new Error(‘That API key looks invalid — re-check it in Settings.’);
-    if(lastStatus===429) throw new Error(‘Free scan limit reached — try again in a few minutes, or tomorrow if daily quota is used up.’);
-    throw new Error(‘Scan service error: ‘+msg);
+    var msg=String(lastStatus);
+    try{ var j=await res.json(); if(j.error&&j.error.message) msg=j.error.message; }catch(e){}
+    if(lastStatus===400 && /api key/i.test(msg)) throw new Error("That API key looks invalid \u2014 re-check it in Settings.");
+    if(lastStatus===429) throw new Error("Free scan limit reached \u2014 try again in a few minutes, or tomorrow if daily quota is used up.");
+    throw new Error("Scan service error: "+msg);
   }
-  const data=await res.json();
-  const txt=data.candidates && data.candidates[0] && data.candidates[0].content
+  var data=await res.json();
+  var txt=data.candidates && data.candidates[0] && data.candidates[0].content
     && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text;
-  if(!txt) throw new Error(‘Could not find anything readable — try a clearer, well-lit photo.’);
-  try{ return JSON.parse(txt); }catch(e){ throw new Error(‘Could not understand the scan result — try again.’); }
+  if(!txt) throw new Error("Could not find anything readable \u2014 try a clearer, well-lit photo.");
+  try{ return JSON.parse(txt); }catch(e){ throw new Error("Could not understand the scan result \u2014 try again."); }
 }
 
 // ---- Receipt review ----
