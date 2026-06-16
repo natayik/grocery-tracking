@@ -136,9 +136,8 @@
   label{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin:14px 0 6px}
   input,select,textarea{
     width:100%; font-size:16px; padding:11px 12px; border:1px solid var(--line);
-    border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit; box-sizing:border-box;
+    border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit;
   }
-  select{padding-right:36px}
   input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand); background:#fff}
   textarea{resize:vertical; min-height:54px}
   .seg{display:flex; gap:8px; margin-top:4px}
@@ -449,8 +448,13 @@
   <div class="page-body">
   <label>Google AI Studio API key</label>
   <input id="f-apikey" type="password" placeholder="Paste your key" autocomplete="off">
+  <div id="backup-key-wrap" style="display:none; margin-top:6px">
+    <label>Backup key (Optional)</label>
+    <input id="f-apikey2" type="password" placeholder="Paste a second key" autocomplete="off">
+  </div>
   <p class="hint">Stored only on this device — never in the app's code. Powers receipt &amp; item scanning.
-    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key →</a></p>
+    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key →</a>
+    <br><a href="#" class="link-btn" id="toggle-backup-key" onclick="event.preventDefault(); toggleBackupKeyField()">Add backup key</a></p>
   <label>Postal code</label>
   <input id="f-postal" placeholder="e.g. V6X 0V3" autocomplete="off">
   <p class="hint">Used to find your local Costco &amp; T&amp;T flyer deals.</p>
@@ -1098,9 +1102,20 @@ function del(id){
 
 // ---- Settings / API key ----
 const KEY_API='groceryTracker.geminiKey';
+const KEY_API2='groceryTracker.geminiKey2';
 function getApiKey(){ try{ return localStorage.getItem(KEY_API)||''; }catch(e){ return ''; } }
+function getApiKey2(){ try{ return localStorage.getItem(KEY_API2)||''; }catch(e){ return ''; } }
+function getApiKeys(){ var keys=[getApiKey()]; var k2=getApiKey2(); if(k2) keys.push(k2); return keys; }
+function toggleBackupKeyField(){
+  var w=document.getElementById('backup-key-wrap');
+  var showing=w.style.display!=='none';
+  if(showing){ w.style.display='none'; document.getElementById('f-apikey2').value=''; document.getElementById('toggle-backup-key').textContent='Add backup key'; }
+  else{ w.style.display='block'; document.getElementById('toggle-backup-key').textContent='Remove backup key'; }
+}
 function openSettings(){
   document.getElementById('f-apikey').value=getApiKey();
+  document.getElementById('f-apikey2').value=getApiKey2();
+  var hasK2=!!getApiKey2(); document.getElementById('backup-key-wrap').style.display=hasK2?'block':'none'; document.getElementById('toggle-backup-key').textContent=hasK2?'Remove backup key':'Add backup key';
   try{ document.getElementById('f-postal').value=localStorage.getItem(KEY_POSTAL)||''; }catch(e){}
   setNotifStatus(''); reflectNotifState();
   setSyncStatus(''); reflectSyncState();
@@ -1110,6 +1125,7 @@ function saveSettings(){
   const hadPostal=getPostal();
   try{
     localStorage.setItem(KEY_API, document.getElementById('f-apikey').value.trim());
+    localStorage.setItem(KEY_API2, document.getElementById('f-apikey2').value.trim());
     localStorage.setItem(KEY_POSTAL, document.getElementById('f-postal').value.trim());
   }catch(e){}
   closeSheet();
@@ -1353,17 +1369,21 @@ const ITEM_SCHEMA={type:'object',properties:{
 async function callGemini(images, prompt, schema){
   var parts=[{text:prompt}];
   images.forEach(function(im){parts.push({inline_data:{mime_type:im.mime,data:im.base64}});});
-  var gemUrl="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(getApiKey());
+  var keys=getApiKeys();
   var gemBody={contents:[{parts:parts}], generationConfig:{responseMimeType:"application/json",responseSchema:schema}};
   var delays=[0,3000,8000];
   var res, lastStatus=0;
-  for(var attempt=0; attempt<delays.length; attempt++){
-    if(attempt>0) await new Promise(function(r){setTimeout(r,delays[attempt]);});
-    try{ res=await fetch(gemUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(gemBody)}); }
-    catch(e){ throw new Error("Network error \u2014 check your connection and try again."); }
-    lastStatus=res.status;
+  for(var ki=0; ki<keys.length; ki++){
+    var gemUrl="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key="+encodeURIComponent(keys[ki]);
+    for(var attempt=0; attempt<delays.length; attempt++){
+      if(attempt>0) await new Promise(function(r){setTimeout(r,delays[attempt]);});
+      try{ res=await fetch(gemUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(gemBody)}); }
+      catch(e){ throw new Error("Network error \u2014 check your connection and try again."); }
+      lastStatus=res.status;
+      if(res.status!==429) break;
+      if(attempt<delays.length-1) continue;
+    }
     if(res.status!==429) break;
-    if(attempt<delays.length-1) continue;
   }
   if(!res.ok){
     var msg=String(lastStatus);
