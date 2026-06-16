@@ -138,7 +138,7 @@
     width:100%; font-size:16px; padding:11px 12px; border:1px solid var(--line);
     border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit;
   }
-  select{padding-right:6px}
+  select{padding-right:10px}
   input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand); background:#fff}
   textarea{resize:vertical; min-height:54px}
   .seg{display:flex; gap:8px; margin-top:4px}
@@ -1393,12 +1393,12 @@ async function callGemini(images, prompt, schema){
 let reviewState={store:'Costco', items:[]};
 function startReview(data){
   reviewState.store = (data.store==='TNT'||data.store==='T&T') ? 'TNT' : 'Costco';
-  reviewState.items = (data.items||[]).map(it=>({
+  reviewState.items = (data.items||[]).map(function(it){ it=stripSizeFromName(it); return ({
     include:true, name:it.name||'', code:it.code||'',
     price:Number(it.price)||0, qty:it.qty||1, discount:Number(it.discount)||0,
     unitPrice:Number(it.unitPrice)||0, unit:normalizeUnit(it.unit), size:it.size||'',
     matched:(Number(it.unitPrice)||0)>0
-  }));
+  });});
   setRevStore(reviewState.store);
   document.getElementById('rev-date').value = (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) ? data.date : todayISO();
   renderReview();
@@ -1466,11 +1466,20 @@ function normalizeUnit(u){
   if(u==='l'||u==='litre'||u==='liter') return 'L';
   return ['each','100g','kg','lb','g'].includes(u) ? u : 'each';
 }
+function stripSizeFromName(data){
+  if(!data || !data.name) return data;
+  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*\s*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
+  var m=data.name.match(sizeRe);
+  if(m){ if(!data.size) data.size=m[0].trim(); data.name=data.name.slice(0,m.index).trim(); }
+  return data;
+}
 function prefillAdd(data){
+  data=stripSizeFromName(data);
   openSheet();
   document.getElementById('sheet-title').textContent='Add scanned item';
   if(data.name) document.getElementById('f-name').value=data.name;
   if(data.code){ setStore('Costco'); document.getElementById('f-code').value=data.code; }
+  else{ setStore('TNT'); }
   if(data.price) document.getElementById('f-price').value=data.price;
   if(data.unit) document.getElementById('f-unit').value=normalizeUnit(data.unit);
   if(data.size) document.getElementById('f-size').value=data.size;
