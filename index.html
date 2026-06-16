@@ -138,7 +138,7 @@
     width:100%; font-size:16px; padding:11px 12px; border:1px solid var(--line);
     border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit;
   }
-  select{padding-right:16px}
+  select{padding-right:6px}
   input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand); background:#fff}
   textarea{resize:vertical; min-height:54px}
   .seg{display:flex; gap:8px; margin-top:4px}
@@ -448,14 +448,10 @@
   <div class="page-head"><h2>Settings</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">&times;</button></div>
   <div class="page-body">
   <label>Google AI Studio API key</label>
-  <input id="f-apikey" type="password" placeholder="Paste your key" autocomplete="off">
-  <div id="backup-key-wrap" style="display:none; margin-top:6px">
-    <label>Backup key (Optional)</label>
-    <input id="f-apikey2" type="password" placeholder="Paste a second key" autocomplete="off">
-  </div>
-  <p class="hint">Stored only on this device — never in the app's code. Powers receipt &amp; item scanning.
-    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key →</a>
-    <br><a href="#" class="link-btn" id="toggle-backup-key" onclick="event.preventDefault(); toggleBackupKeyField()">Add backup key</a></p>
+  <input id="f-apikey" type="password" placeholder="Key 1" autocomplete="off">
+  <input id="f-apikey2" type="password" placeholder="Key 2 (Optional)" autocomplete="off" style="margin-top:6px">
+  <p class="hint">Stored only on this device — never in the app's code. Powers receipt &amp; item scanning. Two keys double your daily scan limit.
+    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key →</a></p>
   <label>Postal code</label>
   <input id="f-postal" placeholder="e.g. V6X 0V3" autocomplete="off">
   <p class="hint">Used to find your local Costco &amp; T&amp;T flyer deals.</p>
@@ -1107,16 +1103,9 @@ const KEY_API2='groceryTracker.geminiKey2';
 function getApiKey(){ try{ return localStorage.getItem(KEY_API)||''; }catch(e){ return ''; } }
 function getApiKey2(){ try{ return localStorage.getItem(KEY_API2)||''; }catch(e){ return ''; } }
 function getApiKeys(){ var keys=[getApiKey()]; var k2=getApiKey2(); if(k2) keys.push(k2); return keys; }
-function toggleBackupKeyField(){
-  var w=document.getElementById('backup-key-wrap');
-  var showing=w.style.display!=='none';
-  if(showing){ w.style.display='none'; document.getElementById('f-apikey2').value=''; document.getElementById('toggle-backup-key').textContent='Add backup key'; }
-  else{ w.style.display='block'; document.getElementById('toggle-backup-key').textContent='Remove backup key'; }
-}
 function openSettings(){
   document.getElementById('f-apikey').value=getApiKey();
   document.getElementById('f-apikey2').value=getApiKey2();
-  var hasK2=!!getApiKey2(); document.getElementById('backup-key-wrap').style.display=hasK2?'block':'none'; document.getElementById('toggle-backup-key').textContent=hasK2?'Remove backup key':'Add backup key';
   try{ document.getElementById('f-postal').value=localStorage.getItem(KEY_POSTAL)||''; }catch(e){}
   setNotifStatus(''); reflectNotifState();
   setSyncStatus(''); reflectSyncState();
