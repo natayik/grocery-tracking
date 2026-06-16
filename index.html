@@ -110,10 +110,11 @@
   /* Long forms render as a full-screen page with a sticky header + close button. */
   .sheet.page{top:0; bottom:0; height:100%; max-height:100%; border-radius:0; padding:0 20px}
   .sheet.page .grab{display:none}
-  .page-foot{position:sticky; bottom:0; background:#fff; margin:16px -20px 0;
+  .page-foot{position:sticky; bottom:0; background:#fff; margin-top:auto; margin-left:-20px; margin-right:-20px;
     padding:12px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);
     display:flex; gap:10px}
   .page-foot .save-btn{flex:1; margin-top:0}
+  .sheet.page{display:flex; flex-direction:column}
   .foot-secondary{flex:1; padding:15px; border:1px solid #f2d6d2; border-radius:12px;
     background:#fff; color:var(--red); font-size:16px; font-weight:700; cursor:pointer}
   .page-head-actions{display:flex; align-items:center; gap:6px}
@@ -276,6 +277,17 @@
   .deal-match{font-size:11px; font-weight:500; color:#4a7a60; margin-top:3px}
   .link-btn{border:none; background:none; color:var(--brand); font-weight:700; font-size:11px;
     text-decoration:underline; cursor:pointer; padding:0 0 0 2px}
+  .sync-code-row{display:flex; align-items:center; gap:10px; margin-top:6px}
+  .sync-code-row input{flex:1; min-width:0; width:0}
+  .sync-code-row .link-btn{font-size:13px; flex:none}
+  .copy-btn{flex:none; display:flex; align-items:center; justify-content:center; width:38px; height:38px;
+    background:#f0f2f1; color:var(--ink); border-radius:10px}
+  .copy-btn:active{background:#e2e6e4}
+  .backup-btn{width:100%; padding:14px; border:1px solid var(--line); border-radius:12px;
+    background:#fafbfa; font-size:14px; font-weight:600; color:var(--ink); cursor:pointer; text-align:center}
+  .backup-btn:active{background:#f0f2f1}
+  #backup-sheet{z-index:60}
+  #backup-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:55}
 </style>
 </head>
 <body>
@@ -427,9 +439,8 @@
 </div>
 
 <!-- Settings sheet -->
-<div class="sheet" id="settings-sheet">
-  <div class="grab"></div>
-  <h2>Settings</h2>
+<div class="sheet page" id="settings-sheet">
+  <div class="page-head"><h2>Settings</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">&times;</button></div>
   <label>Google AI Studio API key</label>
   <input id="f-apikey" type="password" placeholder="Paste your key" autocomplete="off">
   <p class="hint">Stored only on this device — never in the app's code. Powers receipt &amp; item scanning.
@@ -437,14 +448,49 @@
   <label>Postal code</label>
   <input id="f-postal" placeholder="e.g. V6X 0V3" autocomplete="off">
   <p class="hint">Used to find your local Costco &amp; T&amp;T flyer deals.</p>
-  <button class="save-btn" onclick="saveSettings()">Save</button>
-
   <label style="margin-top:22px">Notifications</label>
   <div class="toggle-row">
     <div class="tg-title">Price-drop alerts</div>
     <label class="switch"><input type="checkbox" id="notif-toggle" onchange="onNotifToggle(this.checked)"><span class="slider"></span></label>
   </div>
   <p class="hint" id="notif-status"></p>
+
+  <label style="margin-top:22px">Cloud sync</label>
+  <div class="toggle-row">
+    <div class="tg-title">Sync across devices</div>
+    <label class="switch"><input type="checkbox" id="sync-toggle" onchange="onSyncToggle(this.checked)"><span class="slider"></span></label>
+  </div>
+  <div id="sync-on" style="display:none">
+    <label style="margin-top:6px">Your sync code</label>
+    <div class="sync-code-row">
+      <input id="f-synccode" readonly autocomplete="off">
+      <button class="icon-btn copy-btn" onclick="copySyncCode()" title="Copy code" aria-label="Copy code">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+    </div>
+    <p class="hint">Enter this code on another device to load the same list.</p>
+  </div>
+  <div id="sync-off-load" style="display:none">
+    <p class="hint" style="margin-top:10px"><a href="#" class="link-btn" onclick="event.preventDefault(); document.getElementById('sync-load-row').style.display='flex'; this.parentElement.style.display='none'">Have a sync code from another device?</a></p>
+    <div class="sync-code-row" id="sync-load-row" style="display:none; margin-top:6px">
+      <input id="f-synccode-in" placeholder="Paste a sync code" autocomplete="off">
+      <button class="save-btn" style="width:auto; flex:none; padding:8px 14px; font-size:13px; border-radius:8px; margin-top:0" onclick="useExistingCode()">Load</button>
+    </div>
+  </div>
+  <p class="hint" id="sync-status"></p>
+  <button class="backup-btn" onclick="showSheetEl('backup-sheet')" style="margin-top:14px">Backup your list</button>
+  <div class="page-foot"><button class="save-btn" onclick="saveSettings()">Save</button></div>
+</div>
+<input type="file" id="file-import" accept="application/json,.json" style="display:none" onchange="importBackup(event)">
+
+<!-- Backup sheet -->
+<div id="backup-overlay" onclick="closeBackup()"></div>
+<div class="sheet" id="backup-sheet" onclick="event.stopPropagation()">
+  <div class="grab" onclick="closeBackup()"></div>
+  <h2>Backup your list</h2>
+  <button class="big-btn" onclick="exportBackup(); closeBackup()"><span class="ico">&#x1F4E4;</span> Export to file</button>
+  <button class="big-btn" onclick="document.getElementById('file-import').click()"><span class="ico">&#x1F4E5;</span> Import from file</button>
+  <p class="hint" style="margin-top:10px">Export saves a JSON file to your device. Import replaces your current list.</p>
 </div>
 
 <!-- Scan sheet -->
@@ -505,6 +551,7 @@ function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(state)); storageOK=true; }
   catch(e){ storageOK=false; }
   updateStorageWarning();
+  if(typeof syncPushDebounced==='function') syncPushDebounced();
 }
 function updateStorageWarning(){
   const el=document.getElementById('storage-warn');
@@ -819,7 +866,7 @@ function card(i){
   // Empty thumbnails get a category emoji so every card keeps the same left rhythm.
   const thumb = photo
     ? `<img class="card-img" src="${esc(photo)}" alt="" onclick="event.stopPropagation(); openLightbox('${i.id}')">`
-    : `<div class="card-img card-img-ph">${catEmoji(i.category)}</div>`;
+    : `<div class="card-img card-img-ph">${catEmoji(i.category, i.name)}</div>`;
 
   let priceCol='', dateLine='', daysPill='', meta='', renameBanner='', warnBanner='';
   // Days-left pill on its own line — grey by default, red only when <=3 days left.
@@ -887,9 +934,14 @@ function fmtDate(iso){
   return d.toLocaleDateString('en-CA', sameYear?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'});
 }
 function titleCase(s){
-  return (s||'').replace(/[A-Za-z][A-Za-z0-9’’]*/g, w=>
-    (/^[A-Z][A-Z0-9]*$/.test(w) && w.length<=3) ? w : w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()
-  );
+  var units=/^(\d*)(g|kg|ml|l|pk|oz|lb|ct|pack|lbs)$/i;
+  var unitCase={l:'L',ml:'ml',g:'g',kg:'kg',oz:'oz',lb:'lb',lbs:'lbs',ct:'ct',pk:'pk',pack:'pack'};
+  return (s||'').replace(/[A-Za-z0-9][A-Za-z0-9'\u2018\u2019]*/g, function(w){
+    var m=w.match(units);
+    if(m) return (m[1]||'')+(unitCase[m[2].toLowerCase()]||m[2].toLowerCase());
+    if(/^[A-Z][A-Z0-9]*$/.test(w) && w.length<=3) return w;
+    return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
+  });
 }
 function sectionHead(text, sale){
   return `<div class="section-head${sale?' sale':''}">${sale?'⭐ ':''}${esc(text)}</div>`;
@@ -973,6 +1025,7 @@ function togglePageMenu(ev){ ev.stopPropagation(); document.getElementById('page
 function showSheetEl(id){
   document.body.classList.add('modal-open');
   document.getElementById('scrim').classList.add('open');
+  if(id==='backup-sheet') document.getElementById('backup-overlay').style.display='block';
   document.getElementById(id).classList.add('open');
 }
 function showSheet(){ showSheetEl('sheet'); }
@@ -1038,6 +1091,7 @@ function openSettings(){
   document.getElementById('f-apikey').value=getApiKey();
   try{ document.getElementById('f-postal').value=localStorage.getItem(KEY_POSTAL)||''; }catch(e){}
   setNotifStatus(''); reflectNotifState();
+  setSyncStatus(''); reflectSyncState();
   showSheetEl('settings-sheet');
 }
 function saveSettings(){
@@ -1048,6 +1102,90 @@ function saveSettings(){
   }catch(e){}
   closeSheet();
   if(getPostal() && getPostal()!==hadPostal) checkDeals(); // silent — no "add items" nag on settings save
+}
+
+// ---- Cloud sync (sync-code model, no login; last-write-wins) ----
+const KEY_SYNC='groceryTracker.syncCode';
+function getSyncCode(){ try{ return localStorage.getItem(KEY_SYNC)||''; }catch(e){ return ''; } }
+function setSyncCode(c){ try{ c ? localStorage.setItem(KEY_SYNC,c) : localStorage.removeItem(KEY_SYNC); }catch(e){} }
+function newSyncCode(){ let s=''; while(s.length<16) s+=Math.random().toString(36).slice(2); return s.slice(0,16); }
+function setSyncStatus(t, isErr){ const el=document.getElementById('sync-status'); if(!el) return; el.textContent=t||''; el.classList.toggle('notif-err', !!isErr); }
+function reflectSyncState(){
+  const code=getSyncCode(), on=!!code;
+  const t=document.getElementById('sync-toggle'); if(t) t.checked=on;
+  const box=document.getElementById('sync-on'); if(box) box.style.display=on?'block':'none';
+  const offLoad=document.getElementById('sync-off-load'); if(offLoad){ offLoad.style.display=on?'none':'block'; document.getElementById('sync-load-row').style.display='none'; offLoad.querySelector('p').style.display=''; }
+  const f=document.getElementById('f-synccode'); if(f) f.value=code;
+}
+async function onSyncToggle(on){
+  if(on){
+    let code=getSyncCode();
+    if(!code){ code=newSyncCode(); setSyncCode(code); }
+    reflectSyncState();
+    setSyncStatus('Syncing...');
+    const ok=await syncPush();
+    setSyncStatus(ok?'Sync on.':'Could not reach the server. Sync stays on, will retry.', !ok);
+  } else {
+    setSyncCode(''); reflectSyncState(); setSyncStatus('');
+  }
+}
+function copySyncCode(){
+  const c=getSyncCode(); if(!c) return;
+  try{ navigator.clipboard.writeText(c); setSyncStatus('Code copied.'); }catch(e){ setSyncStatus('Select and copy the code above.'); }
+}
+async function useExistingCode(){
+  const inp=document.getElementById('f-synccode-in'); const code=(inp.value||'').trim();
+  if(!/^[a-z0-9]{12,}$/i.test(code)){ setSyncStatus('That code does not look right.', true); return; }
+  setSyncStatus('Loading...');
+  try{
+    const res=await fetch(syncURL(code));
+    if(res.status===404){ setSyncStatus('No data found for that code yet.', true); return; }
+    if(!res.ok) throw new Error('sync '+res.status);
+    const data=await res.json();
+    state = sanitizeState(data); save(); setSyncCode(code);
+    reflectSyncState(); inp.value=''; render();
+    setSyncStatus('Loaded. This device is now synced.');
+  }catch(e){ setSyncStatus('Could not load: '+(e&&e.message?e.message:e), true); }
+}
+function syncURL(code){ return '/.netlify/functions/sync?code='+encodeURIComponent(code); }
+function sanitizeState(d){ return (d && Array.isArray(d.items)) ? {items:d.items, lastDealCheck:d.lastDealCheck||0} : {items:[]}; }
+let syncTimer=null;
+function syncPushDebounced(){
+  if(!getSyncCode()) return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(syncPush, 1500);
+}
+async function syncPush(){
+  const code=getSyncCode(); if(!code) return false;
+  try{
+    const res=await fetch(syncURL(code),{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items:state.items, lastDealCheck:state.lastDealCheck||0}) });
+    return res.ok;
+  }catch(e){ return false; }
+}
+async function syncPullOnOpen(){
+  const code=getSyncCode(); if(!code) return;
+  try{
+    const res=await fetch(syncURL(code));
+    if(!res.ok) return;
+    const data=await res.json();
+    state=sanitizeState(data); save(); render();
+  }catch(e){}
+}
+function closeBackup(){ document.getElementById('backup-sheet').classList.remove('open'); document.getElementById('backup-overlay').style.display='none'; }
+function exportBackup(){
+  const blob=new Blob([JSON.stringify({items:state.items, lastDealCheck:state.lastDealCheck||0}, null, 2)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='grocery-tracker-'+todayISO()+'.json'; a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);}, 1000);
+}
+function importBackup(ev){
+  const file=ev.target.files&&ev.target.files[0]; ev.target.value='';
+  if(!file) return;
+  var r=new FileReader();
+  r.onload=function(){ try{ state=sanitizeState(JSON.parse(r.result)); save(); render(); syncPushDebounced(); setSyncStatus('Backup imported.'); }
+    catch(e){ setSyncStatus('That file is not a valid backup.', true); } };
+  r.readAsText(file);
 }
 
 // ---- Push notifications (Stage 1a: prove the pipe) ----
@@ -1319,10 +1457,11 @@ function qTokens(s){ return (s||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').sp
 const STOPWORDS=new Set(['whole','signature','kirkland','organic','fresh','natural','original','value','pack','count','large','small','family','select','classic','premium','brand','with','and','the','plus','free','low','new']);
 function contentTokens(s){ return qTokens(s).filter(w=>!STOPWORDS.has(w)); }
 function nameScore(itemName, flyerName){
-  // Score on distinctive (non-generic) words only; require a real overlap.
   const a=contentTokens(itemName); if(!a.length) return 0;
-  const b=new Set(contentTokens(flyerName));
-  return a.filter(w=>b.has(w)).length / a.length;
+  const b=contentTokens(flyerName); if(!b.length) return 0;
+  const bSet=new Set(b);
+  const overlap=a.filter(w=>bSet.has(w)).length;
+  return overlap / Math.min(a.length, b.length);
 }
 async function flippSearch(term, postal){
   const url='https://backflipp.wishabi.com/flipp/items/search?locale=en-ca&postal_code='+encodeURIComponent(postal)+'&q='+encodeURIComponent(term);
@@ -1433,7 +1572,32 @@ function renameToFlyer(id){
 // ---- Auto-categorization ----
 const CATEGORIES=['Produce','Meat & Seafood','Dairy & Eggs','Bakery','Pantry','Frozen','Snacks','Beverages','Household','Personal Care','Other'];
 const CATEGORY_EMOJI={'Produce':'🥬','Meat & Seafood':'🥩','Dairy & Eggs':'🧀','Bakery':'🍞','Pantry':'🥫','Frozen':'🧊','Snacks':'🍿','Beverages':'🥤','Household':'🧽','Personal Care':'🧴','Other':'🛒'};
-function catEmoji(c){ return CATEGORY_EMOJI[c] || '🛒'; }
+var ITEM_EMOJI=[
+  [/blueberr/i,'🫐'],[/strawberr/i,'🍓'],[/raspberr/i,'🍓'],[/banana/i,'🍌'],[/apple/i,'🍎'],
+  [/orange|mandarin|clementine/i,'🍊'],[/lemon/i,'🍋'],[/grape(?!fruit)/i,'🍇'],[/grapefruit/i,'🍊'],
+  [/mango/i,'🥭'],[/avocado/i,'🥑'],[/watermelon/i,'🍉'],[/melon/i,'🍈'],[/peach|nectarine/i,'🍑'],
+  [/pineapple/i,'🍍'],[/cherry|cherries/i,'🍒'],[/pear/i,'🍐'],[/kiwi/i,'🥝'],[/coconut/i,'🥥'],
+  [/tomato/i,'🍅'],[/potato/i,'🥔'],[/carrot/i,'🥕'],[/corn/i,'🌽'],[/broccoli/i,'🥦'],
+  [/lettuce|salad/i,'🥬'],[/cucumber/i,'🥒'],[/pepper|jalapeno/i,'🌶️'],[/onion/i,'🧅'],
+  [/garlic/i,'🧄'],[/mushroom/i,'🍄'],[/eggplant/i,'🍆'],[/sweet potato|yam/i,'🍠'],
+  [/chili/i,'🌶️'],[/ginger/i,'🫚'],
+  [/chicken/i,'🍗'],[/beef|steak/i,'🥩'],[/pork|bacon|ham/i,'🥓'],[/lamb/i,'🍖'],
+  [/salmon/i,'🐟'],[/shrimp|prawn/i,'🦐'],[/fish/i,'🐟'],[/crab/i,'🦀'],
+  [/lobster/i,'🦞'],[/sausage/i,'🌭'],
+  [/milk/i,'🥛'],[/cheese/i,'🧀'],[/butter/i,'🧈'],[/yogurt/i,'🥛'],[/egg/i,'🥚'],
+  [/bread|baguette/i,'🍞'],[/croissant/i,'🥐'],[/bagel/i,'🥯'],[/cake/i,'🎂'],[/cookie/i,'🍪'],
+  [/rice/i,'🍚'],[/pasta|noodle/i,'🍜'],[/soup/i,'🍲'],[/tofu/i,'🧊'],
+  [/olive oil/i,'🫒'],[/oil/i,'🫙'],[/honey/i,'🍯'],[/peanut butter/i,'🥜'],
+  [/almond/i,'🥜'],[/nut|walnut|cashew/i,'🥜'],[/chocolate/i,'🍫'],[/candy/i,'🍬'],
+  [/coffee/i,'☕'],[/tea/i,'🍵'],[/juice/i,'🧃'],[/wine/i,'🍷'],[/beer/i,'🍺'],[/water/i,'💧'],
+  [/cereal|granola|oat/i,'🥣'],[/chip/i,'🍟'],[/popcorn/i,'🍿'],[/cracker/i,'🍘'],
+  [/ice cream/i,'🍦'],[/frozen/i,'🧊'],[/pizza/i,'🍕'],[/dumpling/i,'🥟'],[/wonton/i,'🥟'],
+  [/soap|detergent|dish|dawn/i,'🧴'],[/towel|tissue|paper/i,'🧻'],[/wrap|foil|bag/i,'🧹']
+];
+function catEmoji(c, name){
+  if(name){ for(var i=0;i<ITEM_EMOJI.length;i++){ if(ITEM_EMOJI[i][0].test(name)) return ITEM_EMOJI[i][1]; } }
+  return CATEGORY_EMOJI[c] || '🛒';
+}
 function keywordCategory(name){
   const n=(name||'').toLowerCase();
   const map=[
@@ -1522,6 +1686,7 @@ render();
 ensureCategories();
 loadAllImages().then(render);
 setTimeout(()=>{ const last=state.lastDealCheck||0; if(getPostal() && Date.now()-last > 24*3600*1000) checkDeals(); }, 200);
+syncPullOnOpen();
 </script>
 </body>
 </html>
