@@ -115,6 +115,7 @@
     display:flex; gap:10px}
   .page-foot .save-btn{flex:1; margin-top:0; border:1px solid var(--brand)}
   .sheet.page{display:flex; flex-direction:column}
+  .page-body{flex:1; overflow-y:auto; padding-bottom:24px}
   .foot-secondary{flex:1; padding:15px; border:1px solid #f2d6d2; border-radius:12px;
     background:#fff; color:var(--red); font-size:16px; font-weight:700; cursor:pointer}
   .page-head-actions{display:flex; align-items:center; gap:6px}
@@ -335,6 +336,7 @@
     </div>
   </div>
 
+  <div class="page-body">
   <label>Type</label>
   <div class="seg" id="seg-kind" style="margin-top:2px">
     <button data-kind="purchase" class="sel" onclick="setKind('purchase')">Purchase</button>
@@ -423,6 +425,7 @@
   <select id="f-category"></select>
 
   <div id="price-history"></div>
+  </div>
 
   <div class="page-foot">
     <button id="delete-btn" class="foot-secondary" style="display:none" onclick="deleteCurrent()">Delete</button>
@@ -441,6 +444,7 @@
 <!-- Settings sheet -->
 <div class="sheet page" id="settings-sheet">
   <div class="page-head"><h2>Settings</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">&times;</button></div>
+  <div class="page-body">
   <label>Google AI Studio API key</label>
   <input id="f-apikey" type="password" placeholder="Paste your key" autocomplete="off">
   <p class="hint">Stored only on this device — never in the app's code. Powers receipt &amp; item scanning.
@@ -479,6 +483,7 @@
   </div>
   <p class="hint" id="sync-status"></p>
   <button class="backup-btn" onclick="showSheetEl('backup-sheet')" style="margin-top:14px">Backup your list</button>
+  </div>
   <div class="page-foot"><button class="save-btn" onclick="saveSettings()">Save</button></div>
 </div>
 <input type="file" id="file-import" accept="application/json,.json" style="display:none" onchange="importBackup(event)">
@@ -512,11 +517,13 @@
 <!-- Receipt review sheet -->
 <div class="sheet page" id="review-sheet">
   <div class="page-head"><h2>Review receipt</h2><button class="page-close" onclick="closeSheet()" aria-label="Close">×</button></div>
+  <div class="page-body">
   <div class="seg" id="rev-store" style="margin-top:2px"></div>
   <label>Purchase date</label>
   <input id="rev-date" type="date">
   <label>Items <span style="font-weight:400;color:var(--muted)">— uncheck any to skip</span></label>
   <div id="rev-list"></div>
+  </div>
   <div class="page-foot"><button class="save-btn" id="rev-save" onclick="commitReview()">Add to purchases</button></div>
 </div>
 
