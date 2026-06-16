@@ -186,6 +186,8 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .err{color:#7a1c12; font-size:13.5px; margin-top:12px; line-height:1.45;
     background:#fbe9e7; padding:11px 13px; border-radius:10px;}
+  .retry-btn{display:block; margin:10px auto 0; padding:8px 20px; font-size:14px;
+    border:1px solid var(--line); border-radius:10px; background:#fafbfa; color:var(--text);}
   .rev-row{border:1px solid var(--line); border-radius:12px; padding:10px; margin-bottom:8px; background:#fafbfa}
   .rev-row.excluded{opacity:.4}
   .rev-top{display:flex; align-items:center; gap:8px; margin-bottom:6px}
@@ -1287,14 +1289,26 @@ function renderThumbs(){
   if(go){ go.style.display='block'; go.textContent='Read '+scanImages.length+' photo'+(scanImages.length>1?'s':''); }
 }
 function removeThumb(i){ scanImages.splice(i,1); renderThumbs(); }
+let lastScanArgs=null;
 async function processScan(){
   if(scanImages.length===0) return;
   const status=document.getElementById('scan-status');
   status.innerHTML='<div class="spinner"></div><div class="scan-status">Reading receipt &amp; matching labels…</div>';
   try{
+    lastScanArgs={images:scanImages.slice(), prompt:BATCH_PROMPT, schema:BATCH_SCHEMA, mode:"batch"};
     const data=await callGemini(scanImages, BATCH_PROMPT, BATCH_SCHEMA);
     startReview(data);
-  }catch(err){ status.innerHTML='<div class="err">'+esc(err.message||'Something went wrong.')+'</div>'; }
+  }catch(err){ status.innerHTML='<div class="err">'+esc(err.message||'Something went wrong.')+'</div><button class="retry-btn" onclick="retryScan()">Retry</button>'; }
+}
+async function retryScan(){
+  if(!lastScanArgs) return;
+  var status=document.getElementById("scan-status");
+  status.innerHTML='<div class="spinner"></div><div class="scan-status">Retrying scan…</div>';
+  try{
+    var data=await callGemini(lastScanArgs.images, lastScanArgs.prompt, lastScanArgs.schema);
+    if(lastScanArgs.mode==="item"){ closeSheet(); prefillAdd(data); }
+    else{ startReview(data); }
+  }catch(err){ status.innerHTML='<div class="err">'+esc(err.message||"Something went wrong.")+'</div><button class="retry-btn" onclick="retryScan()">Retry</button>'; }
 }
 function fileToBase64(file, maxDim){
   return new Promise((resolve,reject)=>{
@@ -1329,10 +1343,11 @@ async function onImagePicked(e){
   if(scanMode==='item'){
     status.innerHTML='<div class="spinner"></div><div class="scan-status">Reading the item…</div>';
     try{
-      const img=await fileToBase64(files[0], 1600);
+      const img=await fileToBase64(files[0], 1024);
+      lastScanArgs={images:[img], prompt:ITEM_PROMPT, schema:ITEM_SCHEMA, mode:"item"};
       const data=await callGemini([img], ITEM_PROMPT, ITEM_SCHEMA);
       closeSheet(); prefillAdd(data);
-    }catch(err){ status.innerHTML='<div class="err">'+esc(err.message||'Something went wrong.')+'</div>'; }
+    }catch(err){ status.innerHTML='<div class="err">'+esc(err.message||'Something went wrong.')+'</div><button class="retry-btn" onclick="retryScan()">Retry</button>'; }
     return;
   }
   status.innerHTML='';
@@ -1351,10 +1366,10 @@ const BATCH_SCHEMA={type:'object',properties:{
   }, required:['name','price']}}
 }, required:['items']};
 
-const ITEM_PROMPT='You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else ""), price (PREFER the price-per-unit if one is shown, such as per 100g or per kg; otherwise the regular/total price; as a number), unit (the measure the returned price is per: one of "each","100g","kg","lb","L","pack"; use "each" if only a total price is shown), size (net weight or size text if shown, e.g. "0.453 kg" or "24 pack", else ""). For T&T (Chinese) products, if the name appears in both Chinese and English, return both together, e.g. "老干媽 Lao Gan Ma Chili Crisp".';
-const ITEM_SCHEMA={type:'object',properties:{
-  name:{type:'string'}, code:{type:'string'}, price:{type:'number'}, unit:{type:'string'}, size:{type:'string'}
-}, required:['name']};
+const ITEM_PROMPT="You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (PREFER the price-per-unit if one is shown, such as per 100g or per kg; otherwise the regular/total price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use \"each\" if only a total price is shown), size (net weight or size text if shown, e.g. \"0.453 kg\" or \"24 pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). For T&T (Chinese) products, if the name appears in both Chinese and English, return both together, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
+const ITEM_SCHEMA={type:"object",properties:{
+  name:{type:"string"}, code:{type:"string"}, price:{type:"number"}, unit:{type:"string"}, size:{type:"string"}, store:{type:"string"}, link:{type:"string"}
+}, required:["name"]};
 
 async function callGemini(images, prompt, schema){
   var parts=[{text:prompt}];
@@ -1478,11 +1493,12 @@ function prefillAdd(data){
   openSheet();
   document.getElementById('sheet-title').textContent='Add scanned item';
   if(data.name) document.getElementById('f-name').value=data.name;
-  if(data.code){ setStore('Costco'); document.getElementById('f-code').value=data.code; }
-  else{ setStore('TNT'); }
+  if(data.store==="Costco"){ setStore("Costco"); } else{ setStore("TNT"); }
+  if(data.code) document.getElementById("f-code").value=data.code;
   if(data.price) document.getElementById('f-price').value=data.price;
   if(data.unit) document.getElementById('f-unit').value=normalizeUnit(data.unit);
   if(data.size) document.getElementById('f-size').value=data.size;
+  if(data.link) document.getElementById("f-link").value=data.link;
   updateQtyVisibility();
 }
 
