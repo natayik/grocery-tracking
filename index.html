@@ -112,12 +112,13 @@
   .sheet.page .grab{display:none}
   .page-foot{position:sticky; bottom:0; background:#fff; margin-top:auto; margin-left:-20px; margin-right:-20px;
     padding:12px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);
-    display:flex; gap:10px}
+    display:flex; gap:10px; align-items:flex-end}
   .page-foot .save-btn{flex:1; margin-top:0; border:1px solid var(--brand)}
+  .page-foot button{height:46px; padding:0 13px; font-size:15px; box-sizing:border-box}
   .sheet.page{display:flex; flex-direction:column}
   .page-body{flex:1; overflow-y:auto; padding-bottom:24px}
-  .foot-secondary{flex:1; padding:15px; border:1px solid #f2d6d2; border-radius:12px;
-    background:#fff; color:var(--red); font-size:16px; font-weight:700; cursor:pointer}
+  .foot-secondary{flex:1; padding:13px; border:1px solid #f2d6d2; border-radius:12px;
+    background:#fff; color:var(--red); font-size:15px; font-weight:700; cursor:pointer}
   .page-head-actions{display:flex; align-items:center; gap:6px}
   .page-icon{border:none; background:none; font-size:24px; line-height:1; color:var(--muted); cursor:pointer; padding:0 6px}
   .page-menu{position:absolute; top:calc(100% - 4px); right:14px; min-width:170px; background:#fff;
@@ -135,8 +136,9 @@
   label{display:block; font-size:12.5px; font-weight:650; color:var(--muted); margin:14px 0 6px}
   input,select,textarea{
     width:100%; font-size:16px; padding:11px 12px; border:1px solid var(--line);
-    border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit;
+    border-radius:10px; background:#fafbfa; color:var(--ink); font-family:inherit; box-sizing:border-box;
   }
+  select{padding-right:36px}
   input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand); background:#fff}
   textarea{resize:vertical; min-height:54px}
   .seg{display:flex; gap:8px; margin-top:4px}
@@ -148,8 +150,8 @@
   .two{display:flex; gap:10px}
   .two>div{flex:1}
   .save-btn{
-    width:100%; margin-top:22px; padding:15px; border:none; border-radius:12px;
-    background:var(--brand); color:#fff; font-size:16px; font-weight:700; cursor:pointer;
+    width:100%; margin-top:22px; padding:13px; border:none; border-radius:12px;
+    background:var(--brand); color:#fff; font-size:15px; font-weight:700; cursor:pointer;
   }
   .save-btn:active{background:var(--brand-d)}
   .hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4}
@@ -339,8 +341,8 @@
   <div class="page-body">
   <label>Type</label>
   <div class="seg" id="seg-kind" style="margin-top:2px">
-    <button data-kind="purchase" class="sel" onclick="setKind('purchase')">Purchase</button>
     <button data-kind="watch" onclick="setKind('watch')">Watchlist</button>
+    <button data-kind="purchase" class="sel" onclick="setKind('purchase')">Purchase</button>
   </div>
 
   <label>Store</label>
@@ -475,10 +477,13 @@
     <p class="hint">Enter this code on another device to load the same list.</p>
   </div>
   <div id="sync-off-load" style="display:none">
-    <p class="hint" style="margin-top:10px"><a href="#" class="link-btn" onclick="event.preventDefault(); document.getElementById('sync-load-row').style.display='flex'; this.parentElement.style.display='none'">Have a sync code from another device?</a></p>
-    <div class="sync-code-row" id="sync-load-row" style="display:none; margin-top:6px">
-      <input id="f-synccode-in" placeholder="Paste a sync code" autocomplete="off">
-      <button class="save-btn" style="width:auto; flex:none; padding:8px 14px; font-size:13px; border-radius:8px; margin-top:0" onclick="useExistingCode()">Load</button>
+    <p class="hint" style="margin-top:10px"><a href="#" class="link-btn" onclick="event.preventDefault(); document.getElementById('sync-load-row').style.display='block'; this.parentElement.style.display='none'">Have a sync code from another device?</a></p>
+    <div id="sync-load-row" style="display:none; margin-top:6px">
+      <label>Sync code</label>
+      <div class="sync-code-row">
+        <input id="f-synccode-in" placeholder="Paste a sync code" autocomplete="off">
+        <button style="width:auto; flex:none; height:43px; padding:0 16px; font-size:14px; font-weight:600; border:1px solid var(--line); border-radius:10px; background:#fafbfa; color:var(--ink); cursor:pointer; font-family:inherit" onclick="useExistingCode()">Load</button>
+      </div>
     </div>
   </div>
   <p class="hint" id="sync-status"></p>
@@ -651,7 +656,7 @@ async function onLabelPicked(e){
   const st=document.getElementById('label-scan-status');
   st.textContent=' Reading label…';
   try{
-    const img=await fileToBase64(file, 1600);
+    const img=await fileToBase64(file, 1024);
     const data=await callGemini([img], ITEM_PROMPT, ITEM_SCHEMA);
     fillCurrentForm(data);
     st.textContent=' Filled from label ✓';
@@ -1131,7 +1136,7 @@ async function onSyncToggle(on){
     reflectSyncState();
     setSyncStatus('Syncing...');
     const ok=await syncPush();
-    setSyncStatus(ok?'Sync on.':'Could not reach the server. Sync stays on, will retry.', !ok);
+    setSyncStatus(ok?'':'Could not reach the server. Sync stays on, will retry.', !ok);
   } else {
     setSyncCode(''); reflectSyncState(); setSyncStatus('');
   }
@@ -1326,7 +1331,7 @@ async function onImagePicked(e){
   }
   status.innerHTML='';
   for(const f of files){
-    try{ scanImages.push(await fileToBase64(f, 1600)); }catch(err){}
+    try{ scanImages.push(await fileToBase64(f, 1024)); }catch(err){}
   }
   renderThumbs();
 }
@@ -1348,23 +1353,30 @@ const ITEM_SCHEMA={type:'object',properties:{
 async function callGemini(images, prompt, schema){
   const parts=[{text:prompt}];
   images.forEach(im=>parts.push({inline_data:{mime_type:im.mime,data:im.base64}}));
-  const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(getApiKey());
-  const body={contents:[{parts}], generationConfig:{responseMimeType:'application/json',responseSchema:schema}};
-  let res;
-  try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
-  catch(e){ throw new Error('Network error — check your connection and try again.'); }
+  const url=’https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=’+encodeURIComponent(getApiKey());
+  const body={contents:[{parts}], generationConfig:{responseMimeType:’application/json’,responseSchema:schema}};
+  const delays=[0,3000,8000];
+  let res, lastStatus=0;
+  for(let attempt=0; attempt<delays.length; attempt++){
+    if(attempt>0) await new Promise(r=>setTimeout(r,delays[attempt]));
+    try{ res=await fetch(url,{method:’POST’,headers:{‘Content-Type’:’application/json’},body:JSON.stringify(body)}); }
+    catch(e){ throw new Error(‘Network error — check your connection and try again.’); }
+    lastStatus=res.status;
+    if(res.status!==429) break;
+    if(attempt<delays.length-1) continue;
+  }
   if(!res.ok){
-    let msg=String(res.status);
+    let msg=String(lastStatus);
     try{ const j=await res.json(); if(j.error&&j.error.message) msg=j.error.message; }catch(e){}
-    if(res.status===400 && /api key/i.test(msg)) throw new Error('That API key looks invalid — re-check it in Settings.');
-    if(res.status===429) throw new Error('Daily free scan limit reached — try again tomorrow.');
-    throw new Error('Scan service error: '+msg);
+    if(lastStatus===400 && /api key/i.test(msg)) throw new Error(‘That API key looks invalid — re-check it in Settings.’);
+    if(lastStatus===429) throw new Error(‘Free scan limit reached — try again in a few minutes, or tomorrow if daily quota is used up.’);
+    throw new Error(‘Scan service error: ‘+msg);
   }
   const data=await res.json();
   const txt=data.candidates && data.candidates[0] && data.candidates[0].content
     && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text;
-  if(!txt) throw new Error('Couldn’t find anything readable — try a clearer, well-lit photo.');
-  try{ return JSON.parse(txt); }catch(e){ throw new Error('Couldn’t understand the scan result — try again.'); }
+  if(!txt) throw new Error(‘Could not find anything readable — try a clearer, well-lit photo.’);
+  try{ return JSON.parse(txt); }catch(e){ throw new Error(‘Could not understand the scan result — try again.’); }
 }
 
 // ---- Receipt review ----
@@ -1572,7 +1584,14 @@ function dealBannerText(i){
 function renameToFlyer(id){
   const i=state.items.find(x=>x.id===id);
   if(!i || !i.deal) return;
-  i.name=i.deal.flyerName;
+  var n=i.deal.flyerName;
+  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*\s*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
+  var m=n.match(sizeRe);
+  if(m){
+    i.size=m[0].trim();
+    n=n.slice(0,m.index).trim();
+  }
+  i.name=n;
   save(); render();
 }
 
