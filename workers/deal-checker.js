@@ -127,62 +127,89 @@ async function findDeal(item, postal) {
   return cands[0]._score >= threshold ? dealFrom(cands[0], false) : null;
 }
 
-export default {
-  async scheduled(event, env, ctx) {
-    const kv = env.GROCERY_KV;
-    const vapidRaw = await kv.get('vapid');
-    if (!vapidRaw) return;
-    const keys = JSON.parse(vapidRaw);
+async function runCheck(env, { force = false } = {}) {
+  const kv = env.GROCERY_KV;
+  const vapidRaw = await kv.get('vapid');
+  if (!vapidRaw) return { error: 'No VAPID keys in KV — visit /api/vapid first' };
+  const keys = JSON.parse(vapidRaw);
 
-    const contact = env.VAPID_CONTACT || 'mailto:admin@grocery-tracker.app';
-    webpush.setVapidDetails(contact, keys.publicKey, keys.privateKey);
+  const contact = env.VAPID_CONTACT || 'mailto:admin@grocery-tracker.app';
+  webpush.setVapidDetails(contact, keys.publicKey, keys.privateKey);
 
-    const list = await kv.list({ prefix: 'sub/' });
-    for (const { name } of list.keys) {
-      const syncCode = name.slice(4);
-      const [subRaw, syncRaw] = await Promise.all([
-        kv.get(name),
-        kv.get('sync/' + syncCode),
-      ]);
-      if (!subRaw || !syncRaw) continue;
+  const list = await kv.list({ prefix: 'sub/' });
+  const results = [];
 
-      let subRecord, syncData;
-      try { subRecord = JSON.parse(subRaw); } catch { continue; }
-      try { syncData = JSON.parse(syncRaw); } catch { continue; }
+  for (const { name } of list.keys) {
+    const syncCode = name.slice(4);
+    const [subRaw, syncRaw] = await Promise.all([
+      kv.get(name),
+      kv.get('sync/' + syncCode),
+    ]);
+    if (!subRaw || !syncRaw) { results.push({ syncCode, skipped: 'missing sub or sync data' }); continue; }
 
-      const { subscription, postal, lastNotifiedAt } = subRecord;
-      if (!subscription || !postal) continue;
+    let subRecord, syncData;
+    try { subRecord = JSON.parse(subRaw); } catch { continue; }
+    try { syncData = JSON.parse(syncRaw); } catch { continue; }
 
-      // Cap at one notification per 22 hours to avoid spamming
-      if (lastNotifiedAt && Date.now() - lastNotifiedAt < 22 * 3600 * 1000) continue;
+    const { subscription, postal, lastNotifiedAt } = subRecord;
+    if (!subscription || !postal) { results.push({ syncCode, skipped: 'no subscription or postal' }); continue; }
 
-      const items = (syncData.items || []).filter(i => STORES[i.store] && STORES[i.store].flipp);
-      if (!items.length) continue;
+    if (!force && lastNotifiedAt && Date.now() - lastNotifiedAt < 22 * 3600 * 1000) {
+      results.push({ syncCode, skipped: 'notified recently', lastNotifiedAt });
+      continue;
+    }
 
-      const deals = [];
-      for (const item of items) {
-        try {
-          const deal = await findDeal(item, postal);
-          if (qualifies(item, deal)) deals.push({ item, deal });
-        } catch {}
-      }
-      if (!deals.length) continue;
+    const items = (syncData.items || []).filter(i => i.kind === 'watch' && STORES[i.store] && STORES[i.store].flipp);
+    if (!items.length) { results.push({ syncCode, skipped: 'no watchlist items' }); continue; }
 
-      const body = deals.length === 1
-        ? `${deals[0].item.name} is on sale for $${deals[0].deal.price.toFixed(2)}`
-        : `${deals.length} items on your list are on sale now`;
-
+    const checked = [];
+    const deals = [];
+    for (const item of items) {
       try {
-        await webpush.sendNotification(subscription, JSON.stringify({
-          title: 'Grocery Tracker — Deal Alert',
-          body,
-          tag: 'deal-alert',
-        }));
-        subRecord.lastNotifiedAt = Date.now();
-        await kv.put(name, JSON.stringify(subRecord));
+        const deal = await findDeal(item, postal);
+        const matched = qualifies(item, deal);
+        checked.push({ name: item.name, deal: deal ? { price: deal.price, name: deal.name } : null, matched });
+        if (matched) deals.push({ item, deal });
       } catch (e) {
-        if (e.statusCode === 410) await kv.delete(name); // expired subscription
+        checked.push({ name: item.name, error: String(e) });
       }
     }
+
+    if (!deals.length) { results.push({ syncCode, postal, checked, notified: false }); continue; }
+
+    const body = deals.length === 1
+      ? `${deals[0].item.name} is on sale for $${deals[0].deal.price.toFixed(2)}`
+      : `${deals.length} items on your list are on sale now`;
+
+    let notified = false;
+    try {
+      await webpush.sendNotification(subscription, JSON.stringify({
+        title: 'Grocery Tracker — Deal Alert',
+        body,
+        tag: 'deal-alert',
+      }));
+      subRecord.lastNotifiedAt = Date.now();
+      await kv.put(name, JSON.stringify(subRecord));
+      notified = true;
+    } catch (e) {
+      if (e.statusCode === 410) await kv.delete(name);
+    }
+    results.push({ syncCode, postal, checked, notified, message: body });
+  }
+
+  return { checked: results.length, results };
+}
+
+export default {
+  async scheduled(event, env, ctx) {
+    await runCheck(env);
+  },
+
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname !== '/run') return new Response('Not found', { status: 404 });
+    const force = url.searchParams.get('force') === 'true';
+    const result = await runCheck(env, { force });
+    return Response.json(result, { headers: { 'Cache-Control': 'no-store' } });
   },
 };
