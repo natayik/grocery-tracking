@@ -141,19 +141,16 @@ async function findDeal(item, postal) {
   const now = Date.now();
   const ctoks = contentTokens(item.name);
   const toks = ctoks.length ? ctoks : qTokens(item.name);
-  const queries = [...new Set([toks.slice(0, 2).join(' '), toks[0], sortKey(item.name) || item.name].filter(Boolean))];
+  const q = toks.slice(0, 2).join(' ') || toks[0];
+  if (!q) return null;
   const rejected = new Set((item.rejectedFlyers || []).map(s => (s || '').toLowerCase()));
-  let cands = [];
-  for (const q of queries) {
-    let results;
-    try { results = await flippSearch(q, postal); } catch { continue; }
-    cands = results.filter(r =>
-      (!merch || r.merchant_name === merch) && r.current_price > 0 &&
-      (!r.valid_to || new Date(r.valid_to).getTime() > now) &&
-      !rejected.has((r.name || '').toLowerCase())
-    );
-    if (cands.length) break;
-  }
+  let results;
+  try { results = await flippSearch(q, postal); } catch { return null; }
+  const cands = results.filter(r =>
+    (!merch || r.merchant_name === merch) && r.current_price > 0 &&
+    (!r.valid_to || new Date(r.valid_to).getTime() > now) &&
+    !rejected.has((r.name || '').toLowerCase())
+  );
   if (!cands.length) return null;
   const itemSize = parseSize(item.size);
   cands.forEach(r => {
@@ -165,23 +162,11 @@ async function findDeal(item, postal) {
         const ratio = itemSize.value / flyerSize.value;
         if (ratio >= 0.85 && ratio <= 1.18) r._score += 0.15;
         else r._score -= 0.4;
-      } else if (itemSize && flyerSize) {
-        r._score -= 0.4;
-      }
+      } else if (itemSize && flyerSize) { r._score -= 0.4; }
     }
   });
   cands.sort((a, b) => b._score - a._score);
-  const isCostco = item.store === 'Costco';
-  if (item.code) {
-    for (const r of cands.slice(0, 3)) {
-      try {
-        const det = await flippItemDetail(r.flyer_item_id || r.id, postal);
-        if (det.sku && det.sku === String(item.code).trim()) return dealFrom(r, true);
-      } catch {}
-    }
-    if (isCostco) return null;
-  }
-  const threshold = isCostco ? 0.8 : 0.5;
+  const threshold = item.store === 'Costco' ? 0.8 : 0.5;
   return cands[0]._score >= threshold ? dealFrom(cands[0], false) : null;
 }
 
