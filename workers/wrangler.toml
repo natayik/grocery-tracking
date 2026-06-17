@@ -4,7 +4,7 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 14 * * *"]
+crons = ["30 16 * * *"]
 
 # Replace PASTE_YOUR_KV_NAMESPACE_ID_HERE with the ID you copy from the Cloudflare dashboard
 [[kv_namespaces]]
