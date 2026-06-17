@@ -1,8 +1,5 @@
 {
   "name": "grocery-tracker",
   "private": true,
-  "description": "Personal grocery price tracker",
-  "dependencies": {
-    "web-push": "^3.6.7"
-  }
+  "description": "Personal grocery price tracker"
 }
