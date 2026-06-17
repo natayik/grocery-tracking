@@ -5,15 +5,19 @@ A mobile-first PWA for tracking Costco and T&T grocery purchases, price guarante
 Single self-contained file: `index.html`. No build step. Deploy = push to GitHub → Netlify auto-deploys.
 
 ## Files
-- `index.html` — the entire app (HTML + CSS + JS, ~1750 lines)
+- `index.html` — the entire app (HTML + CSS + JS, ~1800 lines)
 - `sw.js` — service worker for push notifications
 - `card-playground.html` — scratch file for Yi to experiment with card designs
+- `wrangler.toml` — Cloudflare Pages config (nodejs_compat flag for functions)
+- `functions/api/` — Cloudflare Pages Functions (sync, vapid, subscribe, test-push)
+- `workers/deal-checker.js` — Cron Worker that checks Flipp daily and sends push alerts
+- `workers/wrangler.toml` — Worker config with cron schedule + KV binding
 
 ## How to deploy
 ```
 deploy   # terminal alias → git add index.html && commit && push
 ```
-Netlify picks it up within ~60 seconds.
+Cloudflare Pages picks it up within ~60 seconds.
 
 ## How to preview locally
 ```
@@ -110,10 +114,14 @@ To add a store: add an entry here — chips, toggles, and filters all pick it up
 
 ---
 
-## Backend (Netlify Functions)
-- `/.netlify/functions/sync` — cloud sync (last-write-wins, no login, sync-code model)
-- `/.netlify/functions/vapid` — returns VAPID public key for push notifications
-- `/.netlify/functions/test-push` — sends a test push notification
+## Backend (Cloudflare)
+- `/api/sync` — cloud sync (last-write-wins, no login, sync-code model) → `functions/api/sync.js`
+- `/api/vapid` — returns VAPID public key for push subscriptions → `functions/api/vapid.js`
+- `/api/subscribe` — stores push subscription + postal code linked to a sync code → `functions/api/subscribe.js`
+- `/api/test-push` — sends a test push notification → `functions/api/test-push.js`
+- Cron Worker — checks Flipp for deals daily, pushes notifications → `workers/deal-checker.js`
+
+All functions use Cloudflare KV namespace `GROCERY_KV` for storage.
 
 ## External APIs
 - **Gemini** — receipt scanning, label scanning, item categorization (user provides their own API key in Settings)
@@ -134,7 +142,8 @@ Yi is a UX designer, not a developer. She does not write or read code.
 |---|---|
 | 2026-06-16 | Fixed horizontal scroll on purchase form page — added `overflow-x:hidden` to `.page-body` |
 | 2026-06-16 | Updated both Gemini prompts (BATCH_PROMPT, ITEM_PROMPT) to always return Traditional Chinese (繁體中文), never Simplified |
+| 2026-06-16 | Added brand-only guard to `nameScore` — rejects matches where both sides have ≥2 unique non-overlapping tokens with zero intersection |
+| 2026-06-16 | Added `parseSize` + size mismatch penalty in `findDeal` — penalises -0.4 when item and flyer sizes parse to same unit family but differ by >15% |
 
 ## Planned / discussed future iterations
-_(update this section as things are decided)_
-- Nothing queued yet
+- Refine match thresholds as more mismatch examples are collected (e.g. brand-only false positives like Lee Kum Kee Soy Sauce ↔ Chuhou Paste)

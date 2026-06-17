@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Playground — Grocery Tracker</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#1b1d1c; color:#e8eae8; display:flex; min-height:100vh}
+  .panel{width:340px; flex:0 0 340px; background:#232624; border-right:1px solid #343835;
+    padding:18px 18px 60px; overflow-y:auto; height:100vh}
+  .panel h1{font-size:16px; margin:0 0 2px}
+  .panel .sub{font-size:12px; color:#9aa09b; margin:0 0 16px}
+  .grp{font-size:11px; letter-spacing:.5px; text-transform:uppercase; color:#8a908b; margin:18px 0 8px; font-weight:700}
+  .ctrl{margin-bottom:12px}
+  .ctrl label{display:flex; justify-content:space-between; font-size:12.5px; color:#c9cdc9; margin-bottom:5px}
+  .ctrl label .val{color:#7fd4a8; font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%; accent-color:#1f9d68}
+  input[type=text]{width:100%; background:#1b1d1c; border:1px solid #3a3e3b; color:#e8eae8; border-radius:8px; padding:8px 10px; font-size:13px}
+  input[type=color]{width:100%; height:32px; padding:2px; background:#1b1d1c; border:1px solid #3a3e3b; border-radius:8px; cursor:pointer}
+  .presets{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px}
+  .presets button{background:#2d312e; border:1px solid #3a3e3b; color:#d7dbd7; font-size:12px; padding:6px 11px; border-radius:20px; cursor:pointer}
+  .presets button:hover{border-color:#1f9d68; color:#7fd4a8}
+  .stagewrap{flex:1; display:flex; flex-direction:column; min-width:0}
+  .stage-scroll{flex:1; overflow-y:auto; background:#f5f6f4; padding:22px}
+  .promptbar{background:#232624; border-top:1px solid #343835; padding:14px 18px}
+  .promptbar .ptitle{font-size:11px; letter-spacing:.5px; text-transform:uppercase; color:#8a908b; font-weight:700; margin-bottom:8px}
+  #prompt{font-size:13px; line-height:1.55; color:#d7dbd7; background:#1b1d1c; border:1px solid #343835; border-radius:10px; padding:12px; max-height:150px; overflow-y:auto; white-space:pre-wrap}
+  #copy{margin-top:10px; background:#1f9d68; border:none; color:#fff; font-size:14px; font-weight:700; padding:11px 18px; border-radius:10px; cursor:pointer}
+  #copy:active{background:#178055}
+
+  #stage{max-width:430px; margin:0 auto}
+  .zone{background:var(--c-zone-bg); border-radius:16px; padding:var(--zone-pad); padding-bottom:2px; margin-bottom:14px}
+  .sec{font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--c-section); margin:4px 4px 8px}
+  .card{background:var(--c-card-bg); border-radius:14px; padding:var(--pad); margin-bottom:var(--card-gap);
+    box-shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+  .row{display:flex; gap:var(--thumb-gap); align-items:flex-start}
+  .thumb{flex:0 0 54px; width:54px; height:54px; border-radius:10px; border:1px solid #e4e7e3; background:#eef3ec; display:flex; align-items:center; justify-content:center; font-size:22px}
+  .main{flex:1; min-width:0}
+  .top{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
+  .head{flex:1; min-width:0}
+  .chip{display:inline-block; color:#fff; font-size:var(--chip-size); font-weight:700; padding:2px 8px; border-radius:6px; letter-spacing:.3px}
+  .chip.tnt{background:#00833e} .chip.costco{background:#e31837}
+  .name{font-size:var(--name-size); font-weight:650; color:var(--c-name); line-height:1.25; margin-top:var(--name-top)}
+  .pcol{flex:0 0 auto; text-align:right; white-space:nowrap}
+  .pwrap{display:flex; flex-direction:column; align-items:flex-end; line-height:1.15}
+  .was{font-size:13px; color:var(--c-was); text-decoration:line-through}
+  .now{font-size:var(--now-size); font-weight:800; color:var(--c-now)}
+  .price{font-size:17px; font-weight:700; color:var(--c-name)}
+  .save{display:inline-block; margin-top:var(--save-gap); font-size:var(--save-size); font-weight:800; color:var(--c-save-text); background:var(--c-save-bg); padding:3px 9px; border-radius:var(--save-radius)}
+  .sub{font-size:var(--sub-size); color:var(--c-sub); font-weight:600; margin-top:var(--sub-gap)}
+  .sub .days{color:var(--c-days); font-weight:700}
+  .meta{font-size:var(--meta-size); color:var(--c-meta); margin-top:var(--meta-gap); line-height:1.5}
+  .rename{display:flex; align-items:center; justify-content:space-between; gap:8px; background:#fff7e6; border:1px solid #f0d99b; border-radius:9px; padding:8px 10px; margin-top:var(--rename-gap); font-size:12px; color:#7a5b00; line-height:1.35}
+  .rename .ra{display:flex; align-items:center; gap:8px; flex:0 0 auto}
+  .rename .link{border:none; background:none; color:#7a5b00; font-weight:700; font-size:12px; text-decoration:underline; cursor:pointer; padding:0}
+  .rename .x{border:none; background:none; color:#7a5b00; font-size:18px; cursor:pointer; padding:0}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>Card playground</h1>
+  <p class="sub">Tweak spacing, type &amp; colors → copy the prompt → paste back to me.</p>
+  <div class="presets" id="presets"></div>
+  <div class="grp">Spacing</div><div id="spacing"></div>
+  <div class="grp">Typography</div><div id="type"></div>
+  <div class="grp">Colors</div><div id="colors"></div>
+  <div class="grp">Copy</div><div id="texts"></div>
+</div>
+<div class="stagewrap">
+  <div class="stage-scroll"><div id="stage"></div></div>
+  <div class="promptbar">
+    <div class="ptitle">Prompt for Claude</div>
+    <div id="prompt"></div>
+    <button id="copy">Copy prompt</button>
+  </div>
+</div>
+<script>
+const DEFAULTS={
+  pad:14, cardGap:10, thumbGap:12, nameTop:6, saveGap:5, subGap:6, metaGap:6, renameGap:8, zonePad:10,
+  nameSize:15.5, nowSize:19, metaSize:12.5, subSize:11.5, chipSize:11, saveSize:11, saveRadius:20,
+  cName:'#1c2420', cNow:'#0a7d5a', cWas:'#6b756f', cMeta:'#6b756f', cSub:'#3f7357', cDays:'#c0392b',
+  cSection:'#0a7d5a', cSaveBg:'#0a7d5a', cSaveText:'#ffffff', cCardBg:'#ffffff', cZoneBg:'#d9efe1',
+  sectionLabel:'On sale now', endsLabel:'Ends', daysSuffix:'days left', sep:'·',
+  regularLabel:'Regular', savedLabel:'Saved', saveLabel:'Save'
+};
+const SPACING=[
+  {k:'pad',label:'Card padding',min:8,max:28,step:1},
+  {k:'cardGap',label:'Space between cards',min:4,max:22,step:1},
+  {k:'thumbGap',label:'Thumbnail gap',min:6,max:22,step:1},
+  {k:'nameTop',label:'Chip → name gap',min:0,max:16,step:1},
+  {k:'saveGap',label:'Price → save pill gap',min:0,max:14,step:1},
+  {k:'subGap',label:'Space above deal line',min:0,max:16,step:1},
+  {k:'metaGap',label:'Space between meta lines',min:0,max:16,step:1},
+  {k:'renameGap',label:'Space above rename banner',min:0,max:18,step:1},
+  {k:'zonePad',label:'On-sale zone padding',min:4,max:22,step:1},
+];
+const TYPE=[
+  {k:'nameSize',label:'Name size',min:13,max:18,step:0.5},
+  {k:'nowSize',label:'Sale price size',min:15,max:26,step:1},
+  {k:'metaSize',label:'Meta size',min:11,max:14,step:0.5},
+  {k:'subSize',label:'Deal-line size',min:11,max:14,step:0.5},
+  {k:'chipSize',label:'Store chip size',min:10,max:13,step:0.5},
+  {k:'saveSize',label:'Save pill size',min:10,max:13,step:0.5},
+  {k:'saveRadius',label:'Save pill radius',min:4,max:20,step:1},
+];
+const COLORS=[
+  {k:'cName',label:'Item name'},{k:'cNow',label:'Sale price'},{k:'cWas',label:'Was price'},
+  {k:'cMeta',label:'Meta text'},{k:'cSub',label:'Deal line'},{k:'cDays',label:'Days-left'},
+  {k:'cSection',label:'Section header'},{k:'cSaveBg',label:'Save pill bg'},{k:'cSaveText',label:'Save pill text'},
+  {k:'cCardBg',label:'Card background'},{k:'cZoneBg',label:'On-sale zone bg'},
+];
+const TEXTS=[
+  {k:'sectionLabel',label:'Section header'},{k:'endsLabel',label:'“Ends” label'},
+  {k:'daysSuffix',label:'“days left” text'},{k:'sep',label:'Separator'},
+  {k:'regularLabel',label:'“Regular” label'},{k:'savedLabel',label:'“Saved” label'},{k:'saveLabel',label:'“Save” pill label'},
+];
+const CSS_KEYS=[...SPACING,...TYPE].map(c=>c.k).concat(COLORS.map(c=>c.k));
+const LABELS={}; [...SPACING,...TYPE,...COLORS,...TEXTS].forEach(c=>LABELS[c.k]=c.label.replace(/[“”]/g,'"'));
+const PRESETS={
+  'Default':{},
+  'Compact':{pad:10,cardGap:6,nameTop:3,subGap:3,metaGap:3,nameSize:14,nowSize:17,metaSize:11.5},
+  'Airy':{pad:18,cardGap:14,nameTop:8,subGap:9,metaGap:9,nameSize:16,nowSize:20,metaSize:13},
+  'Bold price':{nowSize:24,saveSize:12},
+  'Punchy':{nowSize:22,cZoneBg:'#c8e6d0',cSaveBg:'#06593f'},
+};
+let state=Object.assign({},DEFAULTS);
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function kebab(k){return '--'+k.replace(/([A-Z])/g,'-$1').toLowerCase();}
+
+function buildSliders(container, arr){
+  container.innerHTML=arr.map(c=>`<div class="ctrl"><label>${c.label}<span class="val" id="v-${c.k}"></span></label>
+    <input type="range" id="c-${c.k}" min="${c.min}" max="${c.max}" step="${c.step}"></div>`).join('');
+  arr.forEach(c=>{ const inp=document.getElementById('c-'+c.k); inp.value=state[c.k];
+    inp.oninput=()=>{ state[c.k]=parseFloat(inp.value); updateAll(); }; });
+}
+function buildColors(){
+  document.getElementById('colors').innerHTML=COLORS.map(c=>`<div class="ctrl"><label>${c.label}<span class="val" id="v-${c.k}"></span></label>
+    <input type="color" id="col-${c.k}" value="${state[c.k]}"></div>`).join('');
+  COLORS.forEach(c=>{ const inp=document.getElementById('col-'+c.k);
+    inp.oninput=()=>{ state[c.k]=inp.value; updateAll(); }; });
+}
+function buildTexts(){
+  document.getElementById('texts').innerHTML=TEXTS.map(c=>`<div class="ctrl"><label>${c.label}</label>
+    <input type="text" id="t-${c.k}" value="${esc(state[c.k])}"></div>`).join('');
+  TEXTS.forEach(c=>{ const inp=document.getElementById('t-'+c.k); inp.oninput=()=>{ state[c.k]=inp.value; updateAll(); }; });
+}
+function buildPresets(){
+  document.getElementById('presets').innerHTML=Object.keys(PRESETS).map(n=>`<button data-p="${n}">${n}</button>`).join('');
+  document.querySelectorAll('#presets button').forEach(b=>{ b.onclick=()=>{ state=Object.assign({},DEFAULTS,PRESETS[b.dataset.p]); syncInputs(); updateAll(); }; });
+}
+function syncInputs(){
+  [...SPACING,...TYPE].forEach(c=>document.getElementById('c-'+c.k).value=state[c.k]);
+  COLORS.forEach(c=>document.getElementById('col-'+c.k).value=state[c.k]);
+  TEXTS.forEach(c=>document.getElementById('t-'+c.k).value=state[c.k]);
+}
+function renderPreview(){
+  const s=state, stage=document.getElementById('stage');
+  CSS_KEYS.forEach(k=>{ const v=s[k]; stage.style.setProperty(kebab(k), typeof v==='number' ? v+'px' : v); });
+  [...SPACING,...TYPE].forEach(c=>{ const el=document.getElementById('v-'+c.k); if(el) el.textContent=s[c.k]+'px'; });
+  COLORS.forEach(c=>{ const el=document.getElementById('v-'+c.k); if(el) el.textContent=s[c.k]; });
+  const sep=esc(s.sep);
+  stage.innerHTML=`
+    <div class="zone"><div class="sec">${esc(s.sectionLabel)}</div>
+      <div class="card"><div class="row"><div class="thumb">🥬</div><div class="main">
+        <div class="top"><div class="head"><span class="chip tnt">T&amp;T</span><div class="name">Baby Bok Choy</div></div>
+          <div class="pcol"><div class="pwrap"><span class="was">$2.99</span><span class="now">$1.68</span></div><span class="save">${esc(s.saveLabel)} $1.31</span></div></div>
+        <div class="sub">${esc(s.endsLabel)} Jun 19 ${sep} <span class="days">4 ${esc(s.daysSuffix)}</span></div>
+        <div class="meta">${esc(s.regularLabel)} $2.99 ${sep} ${esc(s.savedLabel)} May 26</div>
+        <div class="rename"><span>Flyer name: “Shanghai Bok Choy”</span><span class="ra"><button class="link">Rename</button><button class="x">×</button></span></div>
+      </div></div></div></div>
+    <div class="card"><div class="row"><div class="main">
+      <div class="top"><div class="head"><span class="chip tnt">T&amp;T</span><div class="name">Whole Milk</div></div><div class="pcol"><div class="price">$5.49</div></div></div>
+      <div class="meta">${esc(s.regularLabel)} $5.49 ${sep} ${esc(s.savedLabel)} Jun 7</div></div></div></div>
+    <div class="card"><div class="row"><div class="main">
+      <div class="top"><div class="head"><span class="chip costco">Costco</span><div class="name">Kirkland Rotisserie Chicken</div></div><div class="pcol"><div class="price">$7.99</div></div></div>
+      <div class="meta">Bought May 26 ${sep} 10 days left</div><div class="meta">Item #4227778</div></div></div></div>`;
+}
+function updatePrompt(){
+  const s=state, d=DEFAULTS;
+  const sp=[], ty=[], co=[], cp=[];
+  SPACING.forEach(c=>{ if(s[c.k]!==d[c.k]) sp.push(`${LABELS[c.k].toLowerCase()} ${s[c.k]}px`); });
+  TYPE.forEach(c=>{ if(s[c.k]!==d[c.k]) ty.push(`${LABELS[c.k].toLowerCase()} ${s[c.k]}px`); });
+  COLORS.forEach(c=>{ if(s[c.k].toLowerCase()!==d[c.k].toLowerCase()) co.push(`${LABELS[c.k].toLowerCase()} ${s[c.k]}`); });
+  TEXTS.forEach(c=>{ if(s[c.k]!==d[c.k]) cp.push(`${LABELS[c.k]} → "${s[c.k]}"`); });
+  let out;
+  if(!sp.length&&!ty.length&&!co.length&&!cp.length){ out='No changes from the current card design.'; }
+  else{
+    out='Update the Grocery Tracker item cards (index.html):';
+    if(sp.length) out+='\n\nSpacing: '+sp.join('; ')+'.';
+    if(ty.length) out+='\n\nFont sizes: '+ty.join('; ')+'.';
+    if(co.length) out+='\n\nColors: '+co.join('; ')+'.';
+    if(cp.length) out+='\n\nCopy: '+cp.join('; ')+'.';
+  }
+  document.getElementById('prompt').textContent=out;
+}
+function updateAll(){ renderPreview(); updatePrompt(); }
+buildSliders(document.getElementById('spacing'),SPACING);
+buildSliders(document.getElementById('type'),TYPE);
+buildColors(); buildTexts(); buildPresets(); updateAll();
+document.getElementById('copy').onclick=()=>{ navigator.clipboard.writeText(document.getElementById('prompt').textContent).then(()=>{
+  const b=document.getElementById('copy'), t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1200); }); };
+</script>
+</body>
+</html>

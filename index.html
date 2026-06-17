@@ -274,9 +274,12 @@
     font-size:12px; color:#7a5b00; line-height:1.35}
   .rename-actions{display:flex; align-items:center; gap:8px; flex:0 0 auto}
   .rename-x{border:none; background:none; font-size:18px; line-height:1; color:#7a5b00; cursor:pointer; padding:0 2px}
-  .hist-row{display:flex; justify-content:space-between; font-size:13px; color:var(--ink);
+  .hist-row{display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--ink);
     padding:8px 2px; border-bottom:1px solid var(--line)}
   .hist-row span:first-child{color:var(--muted)}
+  .hist-price-group{display:flex;align-items:center;gap:4px}
+  .hist-del{background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:0;line-height:1;opacity:0.55}
+  .hist-del:active{opacity:1}
   .deal-banner{background:#e6f4ec; color:#1d6b43; font-size:12.5px; font-weight:650;
     border-radius:9px; padding:8px 10px; margin-bottom:10px; line-height:1.45}
   .deal-match{font-size:11px; font-weight:500; color:#4a7a60; margin-top:3px}
@@ -463,6 +466,7 @@
     <label class="switch"><input type="checkbox" id="notif-toggle" onchange="onNotifToggle(this.checked)"><span class="slider"></span></label>
   </div>
   <p class="hint" id="notif-status"></p>
+  <p class="hint" id="notif-bg-hint"></p>
 
   <label style="margin-top:22px">Cloud sync</label>
   <div class="toggle-row">
@@ -758,9 +762,16 @@ function renderPriceHistory(item){
   const el=document.getElementById('price-history'); if(!el) return;
   if(!item || !item.priceHistory || !item.priceHistory.length){ el.innerHTML=''; return; }
   el.innerHTML = '<label style="margin-top:16px">Price history</label>'
-    + item.priceHistory.slice().reverse().map(e=>
-        `<div class="hist-row"><span>${fmtDate(e.date)}${e.sale?' · Sale':''}</span><span>${fmt$(e.price)}</span></div>`
-      ).join('');
+    + item.priceHistory.slice().reverse().map((e,ri)=>{
+        const origIdx = item.priceHistory.length - 1 - ri;
+        return `<div class="hist-row"><span>${fmtDate(e.date)}${e.sale?' · Sale':''}</span><span class="hist-price-group">${fmt$(e.price)}<button class="hist-del" onclick="deletePriceHistoryEntry(${origIdx})" aria-label="Remove">×</button></span></div>`;
+      }).join('');
+}
+function deletePriceHistoryEntry(idx){
+  if(!editId) return;
+  const item=state.items.find(x=>x.id===editId); if(!item) return;
+  item.priceHistory.splice(idx,1);
+  save(); renderPriceHistory(item);
 }
 function closeLightbox(){
   document.getElementById('lightbox').classList.remove('open');
@@ -1121,7 +1132,9 @@ function saveSettings(){
     localStorage.setItem(KEY_POSTAL, document.getElementById('f-postal').value.trim());
   }catch(e){}
   closeSheet();
-  if(getPostal() && getPostal()!==hadPostal) checkDeals(); // silent — no "add items" nag on settings save
+  const newPostal=getPostal();
+  if(newPostal && newPostal!==hadPostal) checkDeals();
+  if(newPostal!==hadPostal) getActiveSub().then(sub=>{ if(sub) storeSubscription(sub); });
 }
 
 // ---- Cloud sync (sync-code model, no login; last-write-wins) ----
@@ -1146,6 +1159,7 @@ async function onSyncToggle(on){
     const ok=await syncPush();
     setSyncStatus(ok?'':'Could not reach the server. Sync stays on, will retry.', !ok);
   } else {
+    deleteSubscription();
     setSyncCode(''); reflectSyncState(); setSyncStatus('');
   }
 }
@@ -1167,7 +1181,7 @@ async function useExistingCode(){
     setSyncStatus('Loaded. This device is now synced.');
   }catch(e){ setSyncStatus('Could not load: '+(e&&e.message?e.message:e), true); }
 }
-function syncURL(code){ return '/.netlify/functions/sync?code='+encodeURIComponent(code); }
+function syncURL(code){ return '/api/sync?code='+encodeURIComponent(code); }
 function sanitizeState(d){ return (d && Array.isArray(d.items)) ? {items:d.items, lastDealCheck:d.lastDealCheck||0} : {items:[]}; }
 let syncTimer=null;
 function syncPushDebounced(){
@@ -1234,13 +1248,15 @@ async function enableNotifications(){
     await navigator.serviceWorker.ready;
     const perm=await Notification.requestPermission();
     if(perm!=='granted'){ setNotifStatus('Notifications are blocked — turn them on for this app in iOS Settings.', true); return false; }
-    const vr=await fetch('/.netlify/functions/vapid');
+    const vr=await fetch('/api/vapid');
     if(!vr.ok) throw new Error('vapid '+vr.status);
     const { publicKey }=await vr.json();
     let sub=await reg.pushManager.getSubscription();
     if(!sub) sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8Array(publicKey) });
-    const pr=await fetch('/.netlify/functions/test-push',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({subscription:sub}) });
+    const pr=await fetch('/api/test-push',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({subscription:sub}) });
     if(!pr.ok) throw new Error((await pr.text())||('push '+pr.status));
+    storeSubscription(sub);
+    updateNotifBgHint(true);
     setNotifStatus(''); // success: no message
     return true;
   }catch(e){ setNotifStatus('Couldn’t enable: '+(e && e.message ? e.message : e), true); return false; }
@@ -1251,16 +1267,40 @@ async function disableNotifications(){
     const sub=reg && await reg.pushManager.getSubscription();
     if(sub) await sub.unsubscribe();
   }catch(e){}
+  deleteSubscription();
+  updateNotifBgHint(false);
   setNotifStatus('');
 }
 async function reflectNotifState(){
   const t=document.getElementById('notif-toggle'); if(!t) return;
   try{
-    if(!('serviceWorker' in navigator) || Notification.permission!=='granted'){ t.checked=false; return; }
+    if(!('serviceWorker' in navigator) || Notification.permission!=='granted'){ t.checked=false; updateNotifBgHint(false); return; }
     const reg=await navigator.serviceWorker.getRegistration();
     const sub=reg && await reg.pushManager.getSubscription();
     t.checked=!!sub;
-  }catch(e){ t.checked=false; }
+    updateNotifBgHint(!!sub);
+  }catch(e){ t.checked=false; updateNotifBgHint(false); }
+}
+function updateNotifBgHint(notifOn){
+  const el=document.getElementById('notif-bg-hint'); if(!el) return;
+  el.textContent = (notifOn && !getSyncCode()) ? 'Turn on Cloud sync below to also get background deal alerts when the app is closed.' : '';
+}
+async function getActiveSub(){
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    return reg ? await reg.pushManager.getSubscription() : null;
+  }catch(e){ return null; }
+}
+function storeSubscription(sub){
+  const code=getSyncCode(), postal=getPostal();
+  if(!code||!sub||!postal) return;
+  fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({subscription:sub,syncCode:code,postal})}).catch(()=>{});
+}
+function deleteSubscription(){
+  const code=getSyncCode(); if(!code) return;
+  fetch('/api/subscribe',{method:'DELETE',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({syncCode:code})}).catch(()=>{});
 }
 
 // ---- Scan ----
@@ -1366,7 +1406,7 @@ const BATCH_SCHEMA={type:'object',properties:{
   }, required:['name','price']}}
 }, required:['items']};
 
-const ITEM_PROMPT="You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (PREFER the price-per-unit if one is shown, such as per 100g or per kg; otherwise the regular/total price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use \"each\" if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). Read all text directly as it appears in the image; ignore any French text on bilingual labels. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
+const ITEM_PROMPT="You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (choose based on how the item is sold: if it is sold by weight — e.g. meat or produce where the total cost varies per purchase based on measured weight — return the per-weight price such as per kg or per 100g; if it is a fixed-unit item — a bottle, box, pack, case, or anything where every customer pays the same total — return the total/each price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use the weight unit for weight-sold items; use \"each\" for fixed-price items or if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). For website screenshots: extract information only from the page text (headings, product title, price, item number as written on the page) — do not read or interpret any product photos or packaging images within the screenshot. For price labels: read the label text directly. In both cases ignore any French text. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
 const ITEM_SCHEMA={type:"object",properties:{
   name:{type:"string"}, code:{type:"string"}, price:{type:"number"}, unit:{type:"string"}, size:{type:"string"}, store:{type:"string"}, link:{type:"string"}
 }, required:["name"]};
@@ -1514,8 +1554,19 @@ function nameScore(itemName, flyerName){
   const a=contentTokens(itemName); if(!a.length) return 0;
   const b=contentTokens(flyerName); if(!b.length) return 0;
   const bSet=new Set(b);
-  const overlap=a.filter(w=>bSet.has(w)).length;
-  return overlap / Math.min(a.length, b.length);
+  const overlapTokens=a.filter(w=>bSet.has(w));
+  const overlap=overlapTokens.length;
+  const score=overlap / Math.min(a.length, b.length);
+  if(score < 0.75){
+    const overlapSet=new Set(overlapTokens);
+    const aExtra=a.filter(w=>!overlapSet.has(w));
+    const bExtra=b.filter(w=>!overlapSet.has(w));
+    if(aExtra.length>=2 && bExtra.length>=2){
+      const aExtraSet=new Set(aExtra);
+      if(!bExtra.some(w=>aExtraSet.has(w))) return 0;
+    }
+  }
+  return score;
 }
 async function flippSearch(term, postal){
   const url='https://backflipp.wishabi.com/flipp/items/search?locale=en-ca&postal_code='+encodeURIComponent(postal)+'&q='+encodeURIComponent(term);
@@ -1532,6 +1583,16 @@ function dealFrom(r, exact){
   return { flyerName:r.name, price:r.current_price, original:r.original_price||null,
            validTo:r.valid_to||'', story:r.sale_story||'', exact:!!exact,
            image:r.clean_image_url||r.clipping_image_url||r.image_url||'' };
+}
+function parseSize(s){
+  const m=(s||'').replace(/\s/g,'').match(/^([\d.]+)(ml|l|g|kg|lb|oz)$/i);
+  if(!m) return null;
+  let v=parseFloat(m[1]), u=m[2].toLowerCase();
+  if(u==='l')  { v*=1000; u='ml'; }
+  if(u==='kg') { v*=1000; u='g';  }
+  if(u==='lb') { v=Math.round(v*453.6); u='g'; }
+  if(u==='oz') { v=Math.round(v*28.35); u='g'; }
+  return {value:v, unit:u};
 }
 async function findDeal(item, postal){
   const merch = STORES[item.store] && STORES[item.store].flipp;
@@ -1551,11 +1612,20 @@ async function findDeal(item, postal){
     if(cands.length) break;
   }
   if(!cands.length) return null;
-  // Soft tiebreaker: nudge candidates whose flyer name carries the item's size; never penalize the (common) absence.
-  const sizeTok=(item.size||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const itemSize=parseSize(item.size);
   cands.forEach(r=>{
     r._score=nameScore(item.name, r.name);
-    if(sizeTok && (r.name||'').toLowerCase().replace(/[^a-z0-9]/g,'').includes(sizeTok)) r._score+=0.15;
+    const flyerSizeMatch=(r.name||'').replace(/\s/g,'').match(/([\d.]+(?:ml|l|g|kg|lb|oz))/i);
+    if(flyerSizeMatch){
+      const flyerSize=parseSize(flyerSizeMatch[0]);
+      if(itemSize && flyerSize && itemSize.unit===flyerSize.unit){
+        const ratio=itemSize.value/flyerSize.value;
+        if(ratio>=0.85 && ratio<=1.18) r._score+=0.15;
+        else r._score-=0.4;
+      } else if(itemSize && flyerSize){
+        r._score-=0.4;
+      }
+    }
   });
   cands.sort((a,b)=> b._score-a._score);
   const isCostco = item.store==='Costco';

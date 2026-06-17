@@ -1,0 +1,7 @@
+{
+  "name": "grocery-deal-checker",
+  "private": true,
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}
