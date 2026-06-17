@@ -181,7 +181,7 @@ async function runCheck(env, { force = false } = {}) {
       ? `${deals[0].item.name} is on sale for $${deals[0].deal.price.toFixed(2)}`
       : `${deals.length} items on your list are on sale now`;
 
-    let notified = false;
+    let notified = false, pushError = null;
     try {
       await webpush.sendNotification(subscription, JSON.stringify({
         title: 'Grocery Tracker — Deal Alert',
@@ -192,9 +192,10 @@ async function runCheck(env, { force = false } = {}) {
       await kv.put(name, JSON.stringify(subRecord));
       notified = true;
     } catch (e) {
+      pushError = { statusCode: e.statusCode, message: e.message, body: e.body };
       if (e.statusCode === 410) await kv.delete(name);
     }
-    results.push({ syncCode, postal, checked, notified, message: body });
+    results.push({ syncCode, postal, checked, notified, message: body, pushError });
   }
 
   return { checked: results.length, results };
