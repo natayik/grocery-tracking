@@ -1158,6 +1158,7 @@ async function onSyncToggle(on){
     setSyncStatus('Syncing...');
     const ok=await syncPush();
     setSyncStatus(ok?'':'Could not reach the server. Sync stays on, will retry.', !ok);
+    getActiveSub().then(sub=>{ if(sub) storeSubscription(sub); });
   } else {
     deleteSubscription();
     setSyncCode(''); reflectSyncState(); setSyncStatus('');
@@ -1292,8 +1293,9 @@ async function getActiveSub(){
   }catch(e){ return null; }
 }
 function storeSubscription(sub){
-  const code=getSyncCode(), postal=getPostal();
-  if(!code||!sub||!postal) return;
+  const code=getSyncCode();
+  if(!code||!sub) return;
+  const postal=getPostal();
   fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({subscription:sub,syncCode:code,postal})}).catch(()=>{});
 }
@@ -1677,7 +1679,7 @@ function dealBannerText(i){
   const d=i.deal, s=STORES[i.store]?STORES[i.store].label:i.store;
   const until = d.validTo ? ` · by ${fmtDate(d.validTo.slice(0,10))}` : '';
   const label = d.exact ? '✓ matched by item #' : 'matched by name';
-  const rename = (d.flyerName && d.flyerName!==i.name)
+  const rename = (d.flyerName && d.flyerName.trim().toLowerCase()!==(i.name||'').trim().toLowerCase())
     ? ` <button class="link-btn" onclick="event.stopPropagation(); renameToFlyer('${i.id}')">use this name</button>` : '';
   const match = `<div class="deal-match">${label}: ${esc(d.flyerName)}${rename}</div>`;
   if(i.kind==='purchase'){
