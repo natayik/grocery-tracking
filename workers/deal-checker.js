@@ -219,14 +219,16 @@ async function runCheck(env, { force = false } = {}) {
 
     if (!deals.length) { results.push({ syncCode, postal, checked, notified: false }); continue; }
 
-    const body = deals.length === 1
-      ? `${deals[0].item.name} is on sale for $${deals[0].deal.price.toFixed(2)}`
-      : `${deals.length} items on your list are on sale now`;
+    const names = deals.map(d => d.item.name);
+    const title = `${deals.length} item${deals.length === 1 ? '' : 's'} on sale!`;
+    const body = names.length === 1 ? names[0]
+      : names.length === 2 ? `${names[0]}, ${names[1]}`
+      : `${names[0]}, ${names[1]} and more`;
 
     let notified = false, pushError = null;
     try {
       await sendPush(subscription, JSON.stringify({
-        title: 'Grocery Tracker — Deal Alert',
+        title,
         body,
         tag: 'deal-alert',
       }), keys, contact);
