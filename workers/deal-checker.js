@@ -77,6 +77,8 @@ function titleCase(s) {
 }
 
 function buildBody(names) {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
   const shown = [names[0]];
   for (let i = 1; i < names.length; i++) {
     const candidate = [...shown, names[i]].join(', ');
