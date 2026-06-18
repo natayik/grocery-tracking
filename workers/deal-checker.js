@@ -65,6 +65,27 @@ const STORES = {
   TNT:    { flipp: 'T&T Supermarket' },
 };
 
+function titleCase(s) {
+  const units = /^(\d*)(g|kg|ml|l|pk|oz|lb|ct|pack|lbs)$/i;
+  const unitCase = { l:'L', ml:'ml', g:'g', kg:'kg', oz:'oz', lb:'lb', lbs:'lbs', ct:'ct', pk:'pk', pack:'pack' };
+  return (s || '').replace(/[A-Za-z0-9][A-Za-z0-9'‘’]*/g, w => {
+    const m = w.match(units);
+    if (m) return (m[1] || '') + (unitCase[m[2].toLowerCase()] || m[2].toLowerCase());
+    if (/^[A-Z][A-Z0-9]*$/.test(w) && w.length <= 3) return w;
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+}
+function buildBody(names) {
+  const shown = [names[0]];
+  for (let i = 1; i < names.length; i++) {
+    const candidate = [...shown, names[i]].join(', ');
+    const full = i < names.length - 1 ? candidate + ' and more' : candidate;
+    if (full.length <= 60) shown.push(names[i]);
+    else break;
+  }
+  return shown.length < names.length ? shown.join(', ') + ' and more' : shown.join(', ');
+}
+
 const STOPWORDS = new Set([
   'whole','signature','kirkland','organic','fresh','natural','original','value',
   'pack','count','large','small','family','select','classic','premium','brand',
@@ -219,11 +240,9 @@ async function runCheck(env, { force = false } = {}) {
 
     if (!deals.length) { results.push({ syncCode, postal, checked, notified: false }); continue; }
 
-    const names = deals.map(d => d.item.name);
+    const names = deals.map(d => titleCase(d.item.name));
     const title = `${deals.length} item${deals.length === 1 ? '' : 's'} on sale!`;
-    const body = names.length === 1 ? names[0]
-      : names.length === 2 ? `${names[0]}, ${names[1]}`
-      : `${names[0]}, ${names[1]} and more`;
+    const body = buildBody(names);
 
     let notified = false, pushError = null;
     try {
