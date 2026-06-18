@@ -244,7 +244,7 @@ async function runCheck(env, { force = false } = {}) {
     if (!deals.length) { results.push({ syncCode, postal, checked, notified: false }); continue; }
 
     const names = deals.map(d => titleCase(d.item.name));
-    const title = titleCase(`${deals.length} item${deals.length === 1 ? '' : 's'} on sale!`);
+    const title = titleCase(`${deals.length} item${deals.length === 1 ? '' : 's'} on sale now!`);
     const body = buildBody(names);
 
     let notified = false, pushError = null;
