@@ -217,13 +217,8 @@ async function runCheck(env, { force = false } = {}) {
     try { subRecord = JSON.parse(subRaw); } catch { continue; }
     try { syncData = JSON.parse(syncRaw); } catch { continue; }
 
-    const { subscription, postal, lastNotifiedAt } = subRecord;
+    const { subscription, postal } = subRecord;
     if (!subscription || !postal) { results.push({ syncCode, skipped: 'no subscription or postal' }); continue; }
-
-    if (!force && lastNotifiedAt && Date.now() - lastNotifiedAt < 22 * 3600 * 1000) {
-      results.push({ syncCode, skipped: 'notified recently', lastNotifiedAt });
-      continue;
-    }
 
     const items = (syncData.items || []).filter(i => i.kind === 'watch' && STORES[i.store] && STORES[i.store].flipp);
     if (!items.length) { results.push({ syncCode, skipped: 'no watchlist items' }); continue; }
@@ -243,6 +238,12 @@ async function runCheck(env, { force = false } = {}) {
 
     if (!deals.length) { results.push({ syncCode, postal, checked, notified: false }); continue; }
 
+    const lastNotifiedItems = subRecord.lastNotifiedItems || {};
+    const newDeals = deals.filter(({ item, deal }) =>
+      lastNotifiedItems[titleCase(item.name)] !== (deal.validTo || '')
+    );
+    if (!force && !newDeals.length) { results.push({ syncCode, postal, checked, notified: false, skipped: 'no new deals' }); continue; }
+
     const names = deals.map(d => titleCase(d.item.name));
     const title = titleCase(`${deals.length} item${deals.length === 1 ? '' : 's'} on sale now!`);
     const body = buildBody(names);
@@ -254,7 +255,8 @@ async function runCheck(env, { force = false } = {}) {
         body,
         tag: 'deal-alert',
       }), keys, contact);
-      subRecord.lastNotifiedAt = Date.now();
+      subRecord.lastNotifiedItems = Object.fromEntries(deals.map(({ item, deal }) => [titleCase(item.name), deal.validTo || '']));
+      delete subRecord.lastNotifiedAt;
       await kv.put(name, JSON.stringify(subRecord));
       notified = true;
     } catch (e) {
