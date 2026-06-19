@@ -1791,7 +1791,7 @@ function renameToFlyer(id){
 }
 
 // ---- Auto-categorization ----
-const CATEGORIES=['Produce','Meat','Seafood','Dairy, Eggs & Tofu','Bakery','Pantry','Prepackaged & Frozen Food','Snacks','Beverages','Household','Personal Care','Other'];
+const CATEGORIES=['Meat','Seafood','Produce','Dairy, Eggs & Tofu','Bakery','Pantry','Prepackaged & Frozen Food','Snacks','Beverages','Household','Personal Care','Other'];
 const CATEGORY_EMOJI={'Produce':'🥬','Meat':'🥩','Seafood':'🐟','Dairy, Eggs & Tofu':'🧀','Bakery':'🍞','Pantry':'🥫','Prepackaged & Frozen Food':'🧊','Snacks':'🍿','Beverages':'🥤','Household':'🧽','Personal Care':'🧴','Other':'🛒'};
 var ITEM_EMOJI=[
   [/blueberr/i,'🫐'],[/strawberr/i,'🍓'],[/raspberr/i,'🍓'],[/banana/i,'🍌'],[/apple/i,'🍎'],
@@ -1822,17 +1822,17 @@ function catEmoji(c, name){
 function keywordCategory(name){
   const n=(name||'').toLowerCase();
   const map=[
-    [/(milk|cheese|yogurt|yoghurt|\begg|butter|cream|tofu)/,'Dairy, Eggs & Tofu'],
-    [/(salmon|tuna|\bfish\b|shrimp|crab|lobster|squid|scallop|seafood|prawn)/,'Seafood'],
-    [/(chicken|beef|pork|tenderloin|breast|sausage|bacon|\bmeat|lamb|ham)/,'Meat'],
-    [/(apple|banana|lettuce|tomato|onion|pepper|spinach|broccoli|bok choy|cabbage|fruit|vegetable|produce|berry|orange|grape|carrot|potato|gai lan|napa)/,'Produce'],
-    [/(bread|\bbun|bagel|bakery|muffin|cake|pastry|tortilla|croissant)/,'Bakery'],
-    [/(water|juice|soda|\bpop\b|coffee|\btea\b|cola|celsius|energy drink|sparkling)/,'Beverages'],
-    [/(chip|cracker|cookie|snack|protein bar|\bnuts|candy|chocolate|popcorn|granola)/,'Snacks'],
-    [/(frozen|\bpizza|ice cream|perogies|dumpling|wonton|spring roll|instant noodle|instant ramen)/,'Prepackaged & Frozen Food'],
-    [/(detergent|\bsoap|dish|towel|paper|cleaner|cascade|dawn|swiffer|laundry|trash|wipe|napkin|foil|bag)/,'Household'],
-    [/(shampoo|toothpaste|lotion|vitamin|diaper|razor|deodorant|sunscreen|supplement|leanfit|whey)/,'Personal Care'],
-    [/(rice|pasta|\boil|sauce|bean|flour|sugar|cereal|soup|peanut butter|honey|spice|noodle|salsa|condiment)/,'Pantry']
+    [/(milk|cheese|yogurt|yoghurt|\begg|butter|\bcream\b|tofu|kefir|oat milk|soy milk|almond milk)/,'Dairy, Eggs & Tofu'],
+    [/(salmon|tuna|shrimp|crab|lobster|squid|scallop|seafood|prawn|clam|mussel|tilapia|halibut|cod|snapper|herring|mackerel|anchov)|\bfish(?! sauce)/,'Seafood'],
+    [/(chicken|beef|pork|tenderloin|breast|sausage|bacon|\bmeat\b|lamb|ham|turkey|duck|\brib\b|ribs\b|brisket|ground|steak|chop\b|loin\b)/,'Meat'],
+    [/(apple|banana|lettuce|tomato|onion|pepper|spinach|broccoli|bok choy|cabbage|fruit|vegetable|produce|berr|orange|grape|carrot|potato|gai lan|napa|kale|celery|zucchini|avocado|mango|melon|\bcorn\b|mushroom|garlic|ginger|lemon|lime|peach|pear|plum|cherry|kiwi|pineapple|watermelon|asparagus|artichoke|beet|radish|daikon)/,'Produce'],
+    [/(bread|\bbun\b|bagel|bakery|muffin|cake|pastry|tortilla|croissant|baguette|\bloaf\b|pita|scone|waffle)/,'Bakery'],
+    [/(water|juice|soda|\bpop\b|coffee|\btea\b|cola|celsius|energy drink|sparkling|kombucha|lemonade|smoothie|drink mix)/,'Beverages'],
+    [/(chip|cracker|cookie|snack|protein bar|almond|walnut|cashew|pistachio|pecan|\bnut\b|nuts\b|candy|chocolate|popcorn|granola|dried fruit|jerky|pretzel|trail mix)/,'Snacks'],
+    [/(frozen|\bpizza\b|ice cream|perogies|dumpling|gyoza|wonton|spring roll|instant noodle|instant ramen|edamame|\bbao\b|frozen meal|pot sticker)/,'Prepackaged & Frozen Food'],
+    [/(detergent|\bsoap\b|dish soap|towel|paper|cleaner|cascade|dawn|swiffer|laundry|trash|wipe|napkin|foil|ziplock|ziploc|cling wrap|glad\b)/,'Household'],
+    [/(shampoo|conditioner|toothpaste|lotion|vitamin|diaper|razor|deodorant|sunscreen|supplement|leanfit|whey|floss|mouthwash|moisturizer)/,'Personal Care'],
+    [/(rice|pasta|\boil\b|sauce|bean|flour|sugar|cereal|soup|\bbroth\b|peanut butter|honey|spice|noodle|salsa|condiment|vinegar|kimchi|miso|\bsoy\b|sesame|hoisin|sriracha|ketchup|mustard|jam|jelly|spread|canned|seasoning|stock|curry|coconut milk|tahini)/,'Pantry'],
   ];
   for(const [re,cat] of map){ if(re.test(n)) return cat; }
   return 'Other';
@@ -1847,9 +1847,23 @@ async function callGeminiJSON(prompt, schema){
   return JSON.parse(txt);
 }
 async function aiCategorize(names){
-  const prompt='Assign each grocery product to exactly ONE category from this list: '+CATEGORIES.join(', ')+
-    '. Products in order:\n'+names.map((n,i)=>(i+1)+'. '+n).join('\n')+
-    '\nReturn {"categories": [...]} with one category per product, in the same order.';
+  const catDesc=[
+    'Meat — fresh/refrigerated: chicken, beef, pork, lamb, turkey, duck, sausage, bacon, deli meat, ribs, ground meat',
+    'Seafood — fresh/refrigerated: fish, salmon, shrimp, crab, scallop, squid, clam, mussel, prawn (NOT fish sauce or oyster sauce)',
+    'Produce — fresh fruits and vegetables of any kind',
+    'Dairy, Eggs & Tofu — milk, cheese, butter, cream, yogurt, eggs, tofu, soy milk, oat milk',
+    'Bakery — bread, buns, bagels, muffins, pastries, cakes, croissants, tortillas, pita',
+    'Pantry — shelf-stable: rice, pasta, noodles, cooking oil, soy sauce, fish sauce, oyster sauce, vinegar, canned goods, soup, broth, condiments, spices, sugar, flour, coffee, tea, honey, peanut butter, sesame oil, kimchi (jarred), hoisin, sriracha, hot sauce',
+    'Prepackaged & Frozen Food — frozen or pre-packaged ready-to-cook: frozen dumplings, gyoza, wontons, spring rolls, pizza, ice cream, frozen meals, instant ramen, pre-marinated meats, edamame, bao',
+    'Snacks — chips, crackers, cookies, candy, chocolate, nuts, almonds, cashews, protein bars, popcorn, granola bars, dried fruit, jerky',
+    'Beverages — water, juice, soda, energy drinks, sparkling water, kombucha, lemonade',
+    'Household — cleaning products, paper towels, dish soap, laundry detergent, trash bags, aluminum foil, plastic wrap, Ziploc bags',
+    'Personal Care — shampoo, conditioner, toothpaste, vitamins, supplements, lotion, sunscreen, deodorant, razors, floss',
+    'Other — only if nothing above fits',
+  ];
+  const prompt='Categorize each grocery product into exactly one category. Categories:\n'+catDesc.join('\n')+
+    '\n\nProducts:\n'+names.map((n,i)=>`${i+1}. ${n}`).join('\n')+
+    '\n\nReturn {"categories":[...]} with one category name per product in the same order. Use the exact name before the em dash (—).';
   const schema={type:'object', properties:{categories:{type:'array', items:{type:'string', enum:CATEGORIES}}}, required:['categories']};
   const out=await callGeminiJSON(prompt, schema);
   return out.categories||[];

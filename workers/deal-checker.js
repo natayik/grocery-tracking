@@ -78,7 +78,7 @@ function titleCase(s) {
 
 function buildBody(names) {
   if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
   const shown = [names[0]];
   for (let i = 1; i < names.length; i++) {
     const candidate = [...shown, names[i]].join(', ');
@@ -268,19 +268,14 @@ async function runCheck(env, { force = false } = {}) {
     // Staple deadline reminders: watchlist staple items on sale ending ≤2 days,
     // not found in purchases within the past 30 days.
     const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
     const allPurchases = (syncData.items || []).filter(i => i.kind === 'purchase');
 
     const stapleUrgent = deals.filter(({ item, deal }) => {
       if (!item.staple || !deal.validTo) return false;
       const daysToEnd = Math.ceil((new Date(deal.validTo).getTime() - today.getTime()) / 86400000);
-      if (daysToEnd < 0 || daysToEnd > 2) return false;
+      if (daysToEnd !== 3) return false;
       const itemToks = new Set(contentTokens(item.name));
-      return !allPurchases.some(p => {
-        if (!p.date) return false;
-        if (new Date(p.date + 'T00:00:00').getTime() < cutoff.getTime()) return false;
-        return contentTokens(p.name).some(t => itemToks.has(t));
-      });
+      return !allPurchases.some(p => contentTokens(p.name).some(t => itemToks.has(t)));
     });
 
     if (stapleUrgent.length > 0) {
