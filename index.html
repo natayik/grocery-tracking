@@ -256,6 +256,7 @@
   .price-now.over{color:var(--ink)}
   .deal-warn{font-size:12px; font-weight:600; color:#8a5a00; background:#fff7e6; border:1px solid #f0d99b; border-radius:8px; padding:5px 9px; margin-top:6px; line-height:1.4}
   .save-badge{display:inline-block; margin-top:5px; font-size:11px; font-weight:800; color:#fff; background:var(--green); padding:3px 9px; border-radius:20px}
+  .bundle-per{display:block; margin-top:2px; font-size:11px; font-weight:700; color:var(--green); text-align:right}
   .per{font-size:12px; font-weight:600; color:var(--muted)}
   .section-head{font-size:11.5px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin:18px 2px 8px}
   .section-head.sale{color:var(--green)}
@@ -844,11 +845,12 @@ function render(){
   const fullList = activeTab==='purchases' ? allP : allW;
 
   if(fullList.length===0){
-    view.innerHTML = activeTab==='purchases'
-      ? emptyState('🧾','No purchases yet','Scan a receipt to log a trip and start each item’s 30‑day price‑guarantee countdown.')
-        + '<div style="text-align:center"><button class="big-btn" style="max-width:260px; margin:0 auto; display:inline-flex" onclick="openScan()"><span class="ico">📷</span> Scan a receipt</button></div>'
-      : emptyState('👀','Watchlist is empty','Save items you want to buy when they go on sale — track the price and catch a deal.')
-        + '<div style="text-align:center"><button class="big-btn" style="max-width:260px; margin:0 auto; display:inline-flex" onclick="openChooser()"><span class="ico">＋</span> Add your first item</button></div>';
+    view.innerHTML = activeTab==="purchases"
+      ? emptyState("🧾","No purchases yet","Scan a receipt to log a trip and start each item’s 30‑day price‑guarantee countdown.")
+        + `<div style="text-align:center"><button class="big-btn" style="max-width:260px;margin:0 auto;display:inline-flex" onclick="openScan()"><span class="ico">📷</span> Scan a receipt</button></div>`
+      : emptyState("👀","Watchlist is empty","Save items you want to buy when they go on sale — track the price and catch a deal.")
+        + `<div style="text-align:center"><button class="big-btn" style="max-width:260px;margin:0 auto;display:inline-flex" onclick="openChooser()"><span class="ico">＋</span> Add your first item</button></div>`
+        + `<div style="text-align:center;margin-top:8px"><button class="big-btn" style="max-width:260px;margin:0 auto;display:inline-flex;color:var(--muted)" onclick="seedQA()"><span class="ico">&#x1F9EA;</span> Load sample data</button></div>`;
     return;
   }
   if(list.length===0){
@@ -899,7 +901,7 @@ function card(i){
   const pill = days => `<div class="days-row"><span class="days-pill${days<=3?' urgent':''}">${days} ${days===1?'day':'days'} left</span></div>`;
   // Per-weight items (kg, lb, 100g, L, g — anything but "each") carry their unit on the price; "each" shows none.
   const unit = i.kind==='watch' ? i.priceUnit : i.unit;
-  const usuf = (unit && unit!=='each') ? ` / ${esc(unit)}` : '';
+  const usuf = (unit && unit!=='each') ? `/${esc(unit)}` : '';
 
   if(i.deal){
     const cur=i.deal.price;
@@ -907,8 +909,24 @@ function card(i){
     // "Was" = the flyer's original if given, else your saved usual price. No original at all → no crossed price, no Save.
     const base = i.kind==='purchase' ? (i.price||0) : (i.deal.original || i.price || 0);
     const save = base>cur ? base-cur : 0;
-    priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
-      + (save>0 ? `<span class="save-badge">Save ${fmt$(save)}${usuf}</span>` : '');
+    const savePct = base>0 && save>0 ? Math.round((save/base)*100) : 0;
+    const isPerWeight = usuf !== '';
+    // Bundle: parse story
+    const storyText = i.deal.story || '';
+    const bm = storyText.match(/(\d+)\s*(?:for|\/)\s*\$?([\d.]+)/i);
+    const bCount = (bm && parseInt(bm[1])>=2) ? parseInt(bm[1]) : 0;
+    const bTotal = bCount ? parseFloat(bm[2]) : 0;
+    if(bCount>=2){
+      // Bundle layout: original/ea crossed out → "N for $X" as main price → per-unit line → "Save $Y/ea" badge
+      priceCol = `<div class="price-wrap">${base>0?`<span class="price-was">${fmt$(base)}/ea</span>`:''}<span class="price-now">${bCount} for ${fmt$(bTotal)}</span></div>`
+        + `<span class="bundle-per">${fmt$(bTotal/bCount)}/ea</span>`
+        + (save>0 ? `<span class="save-badge">Save ${fmt$(save)}/ea</span>` : '');
+    } else {
+      // Normal deal: per-weight → Save %, per-each → Save $X
+      const saveBadge = save>0 ? (isPerWeight ? `Save ${savePct}%` : `Save ${fmt$(save)}`) : '';
+      priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
+        + (saveBadge ? `<span class="save-badge">${saveBadge}</span>` : '');
+    }
     const ends = i.deal.validTo ? `Deal ends ${fmtDate(i.deal.validTo.slice(0,10))}` : '';
     // Date line: purchases pair the buy date with the deal end; whichever deadline binds drives the pill.
     dateLine = i.kind==='purchase'
@@ -916,8 +934,11 @@ function card(i){
       : (ends ? `<div class="card-dates">${ends}</div>` : '');
     daysPill = pill(dealDeadline(i).days);
     if(pricier) warnBanner = `<div class="deal-warn">↑ ${fmt$(cur - i.price)} above your usual ${fmt$(i.price)}</div>`;
-    if(i.deal.flyerName && i.deal.flyerName.trim().toLowerCase()!==(i.name||'').trim().toLowerCase() && i.renameDismissed!==i.deal.flyerName){
-      renameBanner = `<div class="rename-banner"><span>Flyer name: “${esc(titleCase(i.deal.flyerName))}”</span>`
+    const flyerDisplay = titleCase(stripSizeFromStr(i.deal.flyerName || ''));
+    // Strip leading Chinese chars from stored name before comparing — Chinese prefix is preserved by renameToFlyer so it's not a meaningful difference
+    const storedEnglish = (i.name||'').replace(/^[\u3400-\u9fff\uf900-\ufaff]+\s*/, '').trim();
+    if(flyerDisplay && flyerDisplay.toLowerCase() !== storedEnglish.toLowerCase() && i.renameDismissed !== i.deal.flyerName){
+      renameBanner = `<div class="rename-banner"><span>Flyer name: "${esc(flyerDisplay)}"</span>`
         + `<span class="rename-actions"><button class="link-btn" onclick="event.stopPropagation(); renameToFlyer('${i.id}')">Rename</button>`
         + `<button class="rename-x" onclick="event.stopPropagation(); dismissRename('${i.id}')" aria-label="Dismiss">×</button></span></div>`;
     }
@@ -925,11 +946,12 @@ function card(i){
     // Pre-discount original crossed out → what you actually paid.
     priceCol = `<div class="price-wrap"><span class="price-was">${fmt$(i.price + i.discount)}</span><span class="price">${fmt$(i.price)}</span></div>`;
   } else {
-    const per = (i.kind==='watch' && usuf) ? ` <span class="per">${usuf}</span>` : '';
+    const per = (i.kind==='watch' && usuf) ? ` <span class="per">${usuf}</span>`
+      : (i.kind==='purchase' && (i.qty||1)>1 && !usuf) ? ' <span class="per">/ea</span>' : '';
     priceCol = i.price>0 ? `<div class="price">${fmt$(i.price)}${per}</div>` : '';
   }
 
-  if(i.size) meta += `<div class="meta">${esc(i.size)}</div>`;
+  if(i.size) meta += `<div class="meta">${esc(titleCase(i.size))}</div>`;
   if(i.kind==='purchase'){
     if(!i.deal){
       const dl=daysLeft(i.date);
@@ -964,8 +986,9 @@ function titleCase(s){
   var unitCase={l:'L',ml:'ml',g:'g',kg:'kg',oz:'oz',lb:'lb',lbs:'lbs',ct:'ct',pk:'pk',pack:'pack'};
   return (s||'').replace(/[A-Za-z0-9][A-Za-z0-9'\u2018\u2019]*/g, function(w){
     var m=w.match(units);
-    if(m) return (m[1]||'')+(unitCase[m[2].toLowerCase()]||m[2].toLowerCase());
-    if(/^[A-Z][A-Z0-9]*$/.test(w) && w.length<=3) return w;
+    // Guard: "G" in "F&G" is not a gram abbreviation — skip unit rule if no digit prefix and unit is single char
+    if(m && (m[1] || m[2].length>1)) return (m[1]||'')+(unitCase[m[2].toLowerCase()]||m[2].toLowerCase());
+    if(/^[A-Z][A-Z0-9]*$/.test(w) && w.length<=3 && /^[^AEIOUaeiou]+$/.test(w)) return w;
     return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
   });
 }
@@ -1399,7 +1422,7 @@ async function onImagePicked(e){
   renderThumbs();
 }
 
-const BATCH_PROMPT='You are given photos from one Canadian Costco or T&T (TNT) shopping trip. Exactly one photo is the store receipt; any others are price labels printed on individual products (such labels show a product description, an item/article number, the net weight or size, the price per unit such as per 100g or per kg, and the total price). Tasks: (1) From the receipt, extract every purchased product line item. (2) Read each product label. (3) Match each label to its receipt line — prefer the item/article number which appears on both; otherwise match by product name. Return store ("Costco","TNT","Other"), date (YYYY-MM-DD if visible else ""), and items[]. For each item return: name (when a label matched this line, use the clear product name FROM THE LABEL; otherwise expand the receipt abbreviation to the most likely full product name; always keep the brand e.g. Kirkland; for T&T products include both the Traditional Chinese name (繁體中文) and English name, Chinese first then English, e.g. "老干媽香辣脆 Lao Gan Ma Chili Crisp"), code (item number or ""), qty (integer per the quantity rule below), price (NET total paid after discounts, as a number), discount (total discount amount subtracted from this item, 0 if none), unitPrice (price per unit from the matched label, or 0 if none), unit (the measure unitPrice is per: "100g","kg","lb","g","each","L"; "" if unknown), size (net weight or size text from the label with no space between number and unit e.g. "0.453kg" or "750g", else ""). Read all text directly as printed; ignore any French text on bilingual labels. Ignore subtotal, tax, total, payment, change, membership and the receipt barcode number. Ignore the single tax-code letter printed after a price (A, N, E, H). QUANTITY: if a number is printed after the line price (e.g. "99.98 2" means quantity 2) use it as qty, otherwise 1. DISCOUNTS: lines marked TPD (Temporary Price Discount), instant savings, or coupons appear as negative amounts and are NOT separate items — subtract each from the product it applies to ("TPD/55503" applies to item number 55503; "TPD/WHEY" applies to the matching product by name), reflecting it in that product net price and discount field. ROLLED-UP WEIGHED ITEMS: Costco may combine several packs of the same meat/produce item number into one line with a combined total and no quantity shown — infer the quantity from how many discount lines reference that item number (three "TPD/55503" lines means quantity 3), otherwise 1.';
+const BATCH_PROMPT='IMPORTANT: All Chinese text must be in Traditional Chinese characters (繁體中文). NEVER use Simplified Chinese (简体中文). You are given photos from one Canadian Costco or T&T (TNT) shopping trip. Exactly one photo is the store receipt; any others are price labels printed on individual products (such labels show a product description, an item/article number, the net weight or size, the price per unit such as per 100g or per kg, and the total price). Tasks: (1) From the receipt, extract every purchased product line item. (2) Read each product label. (3) Match each label to its receipt line — prefer the item/article number which appears on both; otherwise match by product name. Return store ("Costco","TNT","Other"), date (YYYY-MM-DD if visible else ""), and items[]. For each item return: name (when a label matched this line, use the clear product name FROM THE LABEL; otherwise expand the receipt abbreviation to the most likely full product name; always keep the brand e.g. Kirkland; for T&T products include both the Traditional Chinese name (繁體中文) and English name, Chinese first then English, e.g. "老干媽香辣脆 Lao Gan Ma Chili Crisp"), code (item number or ""), qty (integer per the quantity rule below), price (NET total paid after discounts, as a number), discount (total discount amount subtracted from this item, 0 if none), unitPrice (price per unit from the matched label, or 0 if none), unit (the measure unitPrice is per: "100g","kg","lb","g","each","L"; "" if unknown), size (net weight or size text from the label with no space between number and unit e.g. "0.453kg" or "750g", else ""). Read all text directly as printed; ignore any French text on bilingual labels. Ignore subtotal, tax, total, payment, change, membership and the receipt barcode number. Ignore the single tax-code letter printed after a price (A, N, E, H). QUANTITY: if a number is printed after the line price (e.g. "99.98 2" means quantity 2) use it as qty, otherwise 1. DISCOUNTS: lines marked TPD (Temporary Price Discount), instant savings, or coupons appear as negative amounts and are NOT separate items — subtract each from the product it applies to ("TPD/55503" applies to item number 55503; "TPD/WHEY" applies to the matching product by name), reflecting it in that product net price and discount field. ROLLED-UP WEIGHED ITEMS: Costco may combine several packs of the same meat/produce item number into one line with a combined total and no quantity shown — infer the quantity from how many discount lines reference that item number (three "TPD/55503" lines means quantity 3), otherwise 1.';
 const BATCH_SCHEMA={type:'object',properties:{
   store:{type:'string'}, date:{type:'string'},
   items:{type:'array',items:{type:'object',properties:{
@@ -1408,7 +1431,7 @@ const BATCH_SCHEMA={type:'object',properties:{
   }, required:['name','price']}}
 }, required:['items']};
 
-const ITEM_PROMPT="You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (choose based on how the item is sold: if it is sold by weight — e.g. meat or produce where the total cost varies per purchase based on measured weight — return the per-weight price such as per kg or per 100g; if it is a fixed-unit item — a bottle, box, pack, case, or anything where every customer pays the same total — return the total/each price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use the weight unit for weight-sold items; use \"each\" for fixed-price items or if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). For website screenshots: extract information only from the page text (headings, product title, price, item number as written on the page) — do not read or interpret any product photos or packaging images within the screenshot. For price labels: read the label text directly. In both cases ignore any French text. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
+const ITEM_PROMPT="IMPORTANT: All Chinese text must be in Traditional Chinese characters (繁體中文). NEVER use Simplified Chinese (简体中文). You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (choose based on how the item is sold: if it is sold by weight — e.g. meat or produce where the total cost varies per purchase based on measured weight — return the per-weight price such as per kg or per 100g; if it is a fixed-unit item — a bottle, box, pack, case, or anything where every customer pays the same total — return the total/each price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use the weight unit for weight-sold items; use \"each\" for fixed-price items or if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). For website screenshots: extract information only from the page text (headings, product title, price, item number as written on the page) — do not read or interpret any product photos or packaging images within the screenshot. For price labels: read the label text directly. In both cases ignore any French text. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
 const ITEM_SCHEMA={type:"object",properties:{
   name:{type:"string"}, code:{type:"string"}, price:{type:"number"}, unit:{type:"string"}, size:{type:"string"}, store:{type:"string"}, link:{type:"string"}
 }, required:["name"]};
@@ -1525,10 +1548,15 @@ function normalizeUnit(u){
 }
 function stripSizeFromName(data){
   if(!data || !data.name) return data;
-  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*\s*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
+  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*[-\s]*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
   var m=data.name.match(sizeRe);
   if(m){ if(!data.size) data.size=m[0].trim(); data.name=data.name.slice(0,m.index).trim(); }
   return data;
+}
+function stripSizeFromStr(name){
+  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*[-\s]*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
+  var m=(name||'').match(sizeRe);
+  return m ? name.slice(0,m.index).trim() : (name||'');
 }
 function prefillAdd(data){
   data=stripSizeFromName(data);
@@ -1692,19 +1720,22 @@ function renameToFlyer(id){
   const i=state.items.find(x=>x.id===id);
   if(!i || !i.deal) return;
   var n=i.deal.flyerName;
-  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*\s*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
+  var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*[-\s]*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
   var m=n.match(sizeRe);
   if(m){
     i.size=m[0].trim();
     n=n.slice(0,m.index).trim();
   }
-  i.name=n;
+  // Preserve leading Chinese chars from the stored name so they survive an English-only flyer rename
+  var chinesePrefix=(i.name||'').match(/^[㐀-鿿豈-﫿\u{20000}-\u{2a6df}][㐀-鿿豈-﫿\u{20000}-\u{2a6df}\s]*/u);
+  var englishPart=titleCase(n);
+  i.name=chinesePrefix ? chinesePrefix[0].trimEnd()+' '+englishPart : englishPart;
   save(); render();
 }
 
 // ---- Auto-categorization ----
-const CATEGORIES=['Produce','Meat & Seafood','Dairy & Eggs','Bakery','Pantry','Frozen','Snacks','Beverages','Household','Personal Care','Other'];
-const CATEGORY_EMOJI={'Produce':'🥬','Meat & Seafood':'🥩','Dairy & Eggs':'🧀','Bakery':'🍞','Pantry':'🥫','Frozen':'🧊','Snacks':'🍿','Beverages':'🥤','Household':'🧽','Personal Care':'🧴','Other':'🛒'};
+const CATEGORIES=['Produce','Meat','Seafood','Dairy, Eggs & Tofu','Bakery','Pantry','Prepackaged & Frozen Food','Snacks','Beverages','Household','Personal Care','Other'];
+const CATEGORY_EMOJI={'Produce':'🥬','Meat':'🥩','Seafood':'🐟','Dairy, Eggs & Tofu':'🧀','Bakery':'🍞','Pantry':'🥫','Prepackaged & Frozen Food':'🧊','Snacks':'🍿','Beverages':'🥤','Household':'🧽','Personal Care':'🧴','Other':'🛒'};
 var ITEM_EMOJI=[
   [/blueberr/i,'🫐'],[/strawberr/i,'🍓'],[/raspberr/i,'🍓'],[/banana/i,'🍌'],[/apple/i,'🍎'],
   [/orange|mandarin|clementine/i,'🍊'],[/lemon/i,'🍋'],[/grape(?!fruit)/i,'🍇'],[/grapefruit/i,'🍊'],
@@ -1734,13 +1765,14 @@ function catEmoji(c, name){
 function keywordCategory(name){
   const n=(name||'').toLowerCase();
   const map=[
-    [/(milk|cheese|yogurt|yoghurt|\begg|butter|cream)/,'Dairy & Eggs'],
-    [/(chicken|beef|pork|salmon|fish|shrimp|tenderloin|breast|sausage|bacon|\bmeat|seafood|tofu)/,'Meat & Seafood'],
+    [/(milk|cheese|yogurt|yoghurt|\begg|butter|cream|tofu)/,'Dairy, Eggs & Tofu'],
+    [/(salmon|tuna|\bfish\b|shrimp|crab|lobster|squid|scallop|seafood|prawn)/,'Seafood'],
+    [/(chicken|beef|pork|tenderloin|breast|sausage|bacon|\bmeat|lamb|ham)/,'Meat'],
     [/(apple|banana|lettuce|tomato|onion|pepper|spinach|broccoli|bok choy|cabbage|fruit|vegetable|produce|berry|orange|grape|carrot|potato|gai lan|napa)/,'Produce'],
     [/(bread|\bbun|bagel|bakery|muffin|cake|pastry|tortilla|croissant)/,'Bakery'],
     [/(water|juice|soda|\bpop\b|coffee|\btea\b|cola|celsius|energy drink|sparkling)/,'Beverages'],
     [/(chip|cracker|cookie|snack|protein bar|\bnuts|candy|chocolate|popcorn|granola)/,'Snacks'],
-    [/(frozen|\bpizza|ice cream|perogies)/,'Frozen'],
+    [/(frozen|\bpizza|ice cream|perogies|dumpling|wonton|spring roll|instant noodle|instant ramen)/,'Prepackaged & Frozen Food'],
     [/(detergent|\bsoap|dish|towel|paper|cleaner|cascade|dawn|swiffer|laundry|trash|wipe|napkin|foil|bag)/,'Household'],
     [/(shampoo|toothpaste|lotion|vitamin|diaper|razor|deodorant|sunscreen|supplement|leanfit|whey)/,'Personal Care'],
     [/(rice|pasta|\boil|sauce|bean|flour|sugar|cereal|soup|peanut butter|honey|spice|noodle|salsa|condiment)/,'Pantry']
@@ -1808,6 +1840,35 @@ function installAppIcon(){
     const m=document.createElement('link'); m.rel='manifest';
     m.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(man)); document.head.appendChild(m);
   }catch(e){}
+}
+function seedQA(){
+  const today=todayISO();
+  const daysAgo=n=>{ const d=new Date(today+'T00:00:00'); d.setDate(d.getDate()-n); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+  state.items=[
+    // ── WATCHLIST: one item per new/changed category ──
+    {id:uid(),kind:'watch',store:'Costco',name:'Kirkland Signature Chicken Breast',size:'2.5kg',code:'',price:28.99,priceUnit:'kg',qty:1,date:today,notes:'Buy when under $25/kg',link:'',category:'Meat',priceDate:today,priceHistory:[{price:28.99,date:today}]},
+    {id:uid(),kind:'watch',store:'TNT',name:'大西洋三文魚扒 Atlantic Salmon Steak',size:'',code:'',price:19.99,priceUnit:'kg',qty:1,date:today,notes:'',link:'',category:'Seafood',priceDate:today,priceHistory:[{price:19.99,date:today}]},
+    {id:uid(),kind:'watch',store:'TNT',name:'日本絹豆腐 Silken Tofu',size:'300g',code:'',price:2.49,priceUnit:'each',qty:1,date:today,notes:'',link:'',category:'Dairy, Eggs & Tofu',priceDate:today,priceHistory:[{price:2.49,date:today}]},
+    {id:uid(),kind:'watch',store:'TNT',name:'必品閣 Bibigo Pork & Cabbage Dumplings',size:'756g',code:'',price:12.99,priceUnit:'each',qty:1,date:today,notes:'',link:'',category:'Prepackaged & Frozen Food',priceDate:today,priceHistory:[{price:12.99,date:today}]},
+    // On sale — tests rename banner (flyerName has weight) + Save $ badge
+    {id:uid(),kind:'watch',store:'Costco',name:'Kirkland Peanut Butter',size:'',code:'1234567',price:19.99,priceUnit:'each',qty:1,date:today,notes:'',link:'',category:'Pantry',priceDate:today,priceHistory:[{price:19.99,date:today}],
+      deal:{flyerName:'Kirkland Signature Peanut Butter 2.5kg',price:14.99,original:19.99,validTo:daysAgo(-8),story:'',exact:true,image:''}},
+    // On sale — tests rename banner with special chars (&) + lowercase flyerName + size strip
+    {id:uid(),kind:'watch',store:'TNT',name:'F&G White Sesame Oil',size:'',code:'',price:8.49,priceUnit:'each',qty:1,date:today,notes:'',link:'',category:'Pantry',priceDate:today,priceHistory:[{price:8.49,date:today}],
+      deal:{flyerName:'f&g white sesame oil 750ml',price:6.99,original:8.49,validTo:daysAgo(-6),story:'',exact:true,image:''}},
+    // On sale — tests bundle badge (2 for $9.99) + /ea suffix + Chinese name preserved on rename
+    {id:uid(),kind:'watch',store:'TNT',name:'老干媽 Lao Gan Ma Chili Oil',size:'700mL',code:'',price:6.49,priceUnit:'each',qty:1,date:today,notes:'',link:'',category:'Pantry',priceDate:today,priceHistory:[{price:6.49,date:today}],
+      deal:{flyerName:'Lao Gan Ma Chili Oil',price:4.99,original:6.49,validTo:daysAgo(-5),story:'2 for $9.99',exact:false,image:''}},
+    // ── PURCHASES ──
+    // Within 30 days, on sale → Save % badge + claim amount
+    {id:uid(),kind:'purchase',store:'Costco',name:'Kirkland Butter',size:'4-pack',code:'',price:18.99,qty:1,discount:0,unitPrice:0,unit:'each',date:daysAgo(8),notes:'',link:'',category:'Dairy, Eggs & Tofu',priceDate:daysAgo(8),priceHistory:[{price:18.99,date:daysAgo(8)}],
+      deal:{flyerName:'Kirkland Butter 4-pack',price:14.99,original:null,validTo:daysAgo(-6),story:'',exact:true,image:''}},
+    // 5 days left — urgent pill
+    {id:uid(),kind:'purchase',store:'TNT',name:'老干媽 Lao Gan Ma Chili Crisp',size:'210g',code:'',price:5.99,qty:2,discount:0,unitPrice:0,unit:'each',date:daysAgo(25),notes:'',link:'',category:'Pantry',priceDate:daysAgo(25),priceHistory:[{price:5.99,date:daysAgo(25)}]},
+    // Expired
+    {id:uid(),kind:'purchase',store:'Costco',name:'Atlantic Salmon Fillet',size:'',code:'55503',price:24.79,qty:1,discount:3.00,unitPrice:18.99,unit:'kg',date:daysAgo(35),notes:'',link:'',category:'Seafood',priceDate:daysAgo(35),priceHistory:[{price:24.79,date:daysAgo(35)}]},
+  ];
+  save(); render();
 }
 document.addEventListener('click', ()=> document.querySelectorAll('.card-menu.open, .page-menu.open').forEach(x=>x.classList.remove('open')));
 installAppIcon();
