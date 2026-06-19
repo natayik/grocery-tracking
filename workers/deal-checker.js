@@ -144,7 +144,7 @@ function qualifies(item, deal) {
   return true;
 }
 function dealFrom(r, exact) {
-  return { flyerName: r.name, price: r.current_price, original: r.original_price || null, validTo: r.valid_to || '', exact: !!exact };
+  return { flyerName: r.name, price: r.current_price, original: r.original_price || null, validTo: r.valid_to || '', exact: !!exact, image: r.large_image_url || r.image_url || r.cutout_image_url || null };
 }
 async function flippSearch(term, postal) {
   const url = 'https://backflipp.wishabi.com/flipp/items/search?locale=en-ca&postal_code=' +
@@ -229,7 +229,7 @@ async function runCheck(env, { force = false } = {}) {
       try {
         const deal = await findDeal(item, postal);
         const matched = qualifies(item, deal);
-        checked.push({ name: item.name, deal: deal ? { price: deal.price, name: deal.name } : null, matched });
+        checked.push({ name: item.name, itemHasImage: !!(item.image), deal: deal ? { price: deal.price, flyerName: deal.flyerName, image: deal.image } : null, matched });
         if (matched) deals.push({ item, deal });
       } catch (e) {
         checked.push({ name: item.name, error: String(e) });
@@ -264,6 +264,48 @@ async function runCheck(env, { force = false } = {}) {
       if (e.statusCode === 410) await kv.delete(name);
     }
     results.push({ syncCode, postal, checked, notified, message: body, pushError });
+
+    // Staple deadline reminders: watchlist staple items on sale ending ≤2 days,
+    // not found in purchases within the past 30 days.
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
+    const allPurchases = (syncData.items || []).filter(i => i.kind === 'purchase');
+
+    const stapleUrgent = deals.filter(({ item, deal }) => {
+      if (!item.staple || !deal.validTo) return false;
+      const daysToEnd = Math.ceil((new Date(deal.validTo).getTime() - today.getTime()) / 86400000);
+      if (daysToEnd < 0 || daysToEnd > 2) return false;
+      const itemToks = new Set(contentTokens(item.name));
+      return !allPurchases.some(p => {
+        if (!p.date) return false;
+        if (new Date(p.date + 'T00:00:00').getTime() < cutoff.getTime()) return false;
+        return contentTokens(p.name).some(t => itemToks.has(t));
+      });
+    });
+
+    if (stapleUrgent.length > 0) {
+      const lastStaple = subRecord.lastStapleReminders || {};
+      const newReminders = stapleUrgent.filter(({ item, deal }) =>
+        lastStaple[titleCase(item.name)] !== (deal.validTo || '')
+      );
+      if (force || newReminders.length > 0) {
+        const reminderNames = stapleUrgent.map(d => titleCase(d.item.name));
+        try {
+          await sendPush(subscription, JSON.stringify({
+            title: stapleUrgent.length === 1 ? 'Last chance — deal ends soon!' : `Last chance — ${stapleUrgent.length} deals ending soon!`,
+            body: buildBody(reminderNames) + ' — not yet in your purchases',
+            tag: 'staple-reminder',
+          }), keys, contact);
+          subRecord.lastStapleReminders = {
+            ...lastStaple,
+            ...Object.fromEntries(stapleUrgent.map(({ item, deal }) => [titleCase(item.name), deal.validTo || ''])),
+          };
+          await kv.put(name, JSON.stringify(subRecord));
+        } catch (e) {
+          if (e.statusCode === 410) await kv.delete(name);
+        }
+      }
+    }
   }
 
   return { checked: results.length, results };
