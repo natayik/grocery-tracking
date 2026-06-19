@@ -90,8 +90,8 @@ function buildBody(names) {
 }
 
 const STOPWORDS = new Set([
-  'whole','signature','kirkland','organic','fresh','natural','original','value',
-  'pack','count','large','small','family','select','classic','premium','brand',
+  'whole','signature','kirkland','fresh','natural','original','value',
+  'pack','count','large','small','family','select','classic','brand',
   'with','and','the','plus','free','low','new',
 ]);
 

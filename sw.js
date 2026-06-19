@@ -14,8 +14,13 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window' }).then((wins) => {
-      for (const w of wins) { if ('focus' in w) return w.focus(); }
-      return clients.openWindow('/');
+      const win = wins.find(w => 'focus' in w);
+      if (win) {
+        win.postMessage({ type: 'refresh-deals' });
+        win.focus();
+        return;
+      }
+      return clients.openWindow('/?refresh=deals');
     })
   );
 });

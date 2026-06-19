@@ -905,21 +905,23 @@ function card(i){
 
   if(i.deal){
     const cur=i.deal.price;
-    const pricier = i.kind==='watch' && i.price>0 && cur > i.price;
-    // "Was" = the flyer's original if given, else your saved usual price. No original at all → no crossed price, no Save.
-    const base = i.kind==='purchase' ? (i.price||0) : (i.deal.original || i.price || 0);
-    const save = base>cur ? base-cur : 0;
-    const savePct = base>0 && save>0 ? Math.round((save/base)*100) : 0;
     const isPerWeight = usuf !== '';
-    // Bundle: parse story
+    // Bundle: parse story first so we can use per-unit price for pricier/save
     const storyText = i.deal.story || '';
     const bm = storyText.match(/(\d+)\s*(?:for|\/)\s*\$?([\d.]+)/i);
     const bCount = (bm && parseInt(bm[1])>=2) ? parseInt(bm[1]) : 0;
     const bTotal = bCount ? parseFloat(bm[2]) : 0;
+    // For bundles, deal.price is the bundle total — compare per-unit for pricier/save
+    const effectiveUnit = bCount>=2 ? bTotal/bCount : cur;
+    const pricier = i.kind==='watch' && i.price>0 && effectiveUnit > i.price;
+    // "Was" = the flyer's original if given, else your saved usual price.
+    const base = i.kind==='purchase' ? (i.price||0) : (i.deal.original || i.price || 0);
+    const save = base>effectiveUnit ? base-effectiveUnit : 0;
+    const savePct = base>0 && save>0 ? Math.round((save/base)*100) : 0;
     if(bCount>=2){
       // Bundle layout: original/ea crossed out → "N for $X" as main price → per-unit line → "Save $Y/ea" badge
       priceCol = `<div class="price-wrap">${base>0?`<span class="price-was">${fmt$(base)}/ea</span>`:''}<span class="price-now">${bCount} for ${fmt$(bTotal)}</span></div>`
-        + `<span class="bundle-per">${fmt$(bTotal/bCount)}/ea</span>`
+        + `<span class="bundle-per">${fmt$(effectiveUnit)}/ea</span>`
         + (save>0 ? `<span class="save-badge">Save ${fmt$(save)}/ea</span>` : '');
     } else {
       // Normal deal: per-weight → Save %, per-each → Save $X
@@ -1431,7 +1433,7 @@ const BATCH_SCHEMA={type:'object',properties:{
   }, required:['name','price']}}
 }, required:['items']};
 
-const ITEM_PROMPT="IMPORTANT: All Chinese text must be in Traditional Chinese characters (繁體中文). NEVER use Simplified Chinese (简体中文). You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (choose based on how the item is sold: if it is sold by weight — e.g. meat or produce where the total cost varies per purchase based on measured weight — return the per-weight price such as per kg or per 100g; if it is a fixed-unit item — a bottle, box, pack, case, or anything where every customer pays the same total — return the total/each price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use the weight unit for weight-sold items; use \"each\" for fixed-price items or if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (if the image shows a website URL in the browser address bar or on the page, return it; else \"\"). For website screenshots: extract information only from the page text (headings, product title, price, item number as written on the page) — do not read or interpret any product photos or packaging images within the screenshot. For price labels: read the label text directly. In both cases ignore any French text. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
+const ITEM_PROMPT="IMPORTANT: All Chinese text must be in Traditional Chinese characters (繁體中文). NEVER use Simplified Chinese (简体中文). You are reading ONE grocery item for a watchlist. The image is either an in-store price label / product sticker, OR a screenshot of a product listing on a website (e.g. costco.ca or tntsupermarket.com). Return: name (full product name including brand), code (item/article number if shown, else \"\"), price (choose based on how the item is sold: if it is sold by weight — e.g. meat or produce where the total cost varies per purchase based on measured weight — return the per-weight price such as per kg or per 100g; if it is a fixed-unit item — a bottle, box, pack, case, or anything where every customer pays the same total — return the total/each price; as a number), unit (the measure the returned price is per: one of \"each\",\"100g\",\"kg\",\"lb\",\"L\",\"pack\"; use the weight unit for weight-sold items; use \"each\" for fixed-price items or if only a total price is shown), size (net weight or size text if shown, no space between number and unit, e.g. \"0.453kg\" or \"24pack\", else \"\"), store (the retailer: \"Costco\", \"TNT\", or \"\" if unclear \u2014 look at the URL, logo, or website branding in the image), link (only if a complete URL starting with http:// or https:// is visible in a browser address bar; otherwise \"\") For website screenshots: extract information only from the page text (headings, product title, price, item number as written on the page) — do not read or interpret any product photos or packaging images within the screenshot. For price labels: read the label text directly. In both cases ignore any French text. If the product name appears in both Chinese and English, include both with Traditional Chinese (繁體中文) first then English, e.g. \"\u8001\u5e72\u5abd Lao Gan Ma Chili Crisp\".";
 const ITEM_SCHEMA={type:"object",properties:{
   name:{type:"string"}, code:{type:"string"}, price:{type:"number"}, unit:{type:"string"}, size:{type:"string"}, store:{type:"string"}, link:{type:"string"}
 }, required:["name"]};
@@ -1491,6 +1493,12 @@ function setRevStore(s){
 }
 const UNIT_OPTS=['each','100g','kg','lb','g','L'];
 function renderReview(){
+  // Async link lookup for all included items — runs in background, ready by the time user hits Save
+  reviewState.items.forEach(function(it){
+    if(it.include && it.name && !it.link){
+      lookupProductLink(it.name, reviewState.store||'').then(function(link){ if(link) it.link=link; });
+    }
+  });
   const list=document.getElementById('rev-list');
   if(reviewState.items.length===0){
     list.innerHTML='<div class="err">No line items found. Try a clearer photo of the whole receipt.</div>';
@@ -1550,13 +1558,28 @@ function stripSizeFromName(data){
   if(!data || !data.name) return data;
   var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*[-\s]*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
   var m=data.name.match(sizeRe);
-  if(m){ if(!data.size) data.size=m[0].trim(); data.name=data.name.slice(0,m.index).trim(); }
+  if(m){ if(!data.size) data.size=m[0].trim(); data.name=data.name.slice(0,m.index).replace(/[,;.]+$/,'').trim(); }
   return data;
 }
 function stripSizeFromStr(name){
   var sizeRe=/\s+(\d+\s*[xX×]\s*)?\d+\.?\d*[-\s]*(g|kg|ml|l|oz|lb|lbs|ct|pk|pack|count)\b.*$/i;
   var m=(name||'').match(sizeRe);
-  return m ? name.slice(0,m.index).trim() : (name||'');
+  return m ? name.slice(0,m.index).replace(/[,;.]+$/,'').trim() : (name||'');
+}
+async function lookupProductLink(name, store){
+  var keys=getApiKeys();
+  if(!keys.length || !name) return '';
+  var storeUrl=store==='Costco'?'costco.ca':store==='TNT'?'tntsupermarket.com':'';
+  var prompt='Find the official product page URL for "'+name+'"'+(storeUrl?' on '+storeUrl:'')+'. Return only the full URL starting with https://, nothing else. If you cannot find an exact product page, return empty string.';
+  try{
+    var res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(keys[0]),
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],tools:[{google_search:{}}]})});
+    var d=await res.json();
+    var text=(d&&d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts&&d.candidates[0].content.parts[0]&&d.candidates[0].content.parts[0].text)||'';
+    var m=text.match(/https?:\/\/[^\s"'<>]+/);
+    return m ? m[0].replace(/[.,;)]+$/,'') : '';
+  }catch(e){ return ''; }
 }
 function prefillAdd(data){
   data=stripSizeFromName(data);
@@ -1568,7 +1591,13 @@ function prefillAdd(data){
   if(data.price) document.getElementById('f-price').value=data.price;
   if(data.unit) document.getElementById('f-unit').value=normalizeUnit(data.unit);
   if(data.size) document.getElementById('f-size').value=data.size;
-  if(data.link) document.getElementById("f-link").value=data.link;
+  if(data.link){ document.getElementById("f-link").value=data.link; }
+  else if(data.name){
+    lookupProductLink(data.name, data.store||'').then(function(link){
+      var el=document.getElementById('f-link');
+      if(el && !el.value && link) el.value=link;
+    });
+  }
   updateQtyVisibility();
 }
 
@@ -1578,7 +1607,7 @@ function getPostal(){ try{ return (localStorage.getItem(KEY_POSTAL)||'').replace
 let dealsChecking=false;
 function qTokens(s){ return (s||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(w=>w.length>=3); }
 // Generic words that shouldn't drive a match (so "whole tenderloin" doesn't match "...whole bean coffee").
-const STOPWORDS=new Set(['whole','signature','kirkland','organic','fresh','natural','original','value','pack','count','large','small','family','select','classic','premium','brand','with','and','the','plus','free','low','new']);
+const STOPWORDS=new Set(['whole','signature','kirkland','fresh','natural','original','value','pack','count','large','small','family','select','classic','brand','with','and','the','plus','free','low','new']);
 function contentTokens(s){ return qTokens(s).filter(w=>!STOPWORDS.has(w)); }
 function nameScore(itemName, flyerName){
   const a=contentTokens(itemName); if(!a.length) return 0;
@@ -1881,6 +1910,12 @@ ensureCategories();
 loadAllImages().then(render);
 setTimeout(()=>{ const last=state.lastDealCheck||0; if(getPostal() && Date.now()-last > 24*3600*1000) checkDeals(); }, 200);
 syncPullOnOpen();
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'refresh-deals') checkDeals(false);
+  });
+}
+if (new URLSearchParams(location.search).get('refresh') === 'deals') checkDeals(false);
 </script>
 </body>
 </html>
