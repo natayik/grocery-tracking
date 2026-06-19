@@ -257,7 +257,6 @@
   .deal-warn{font-size:12px; font-weight:600; color:#8a5a00; background:#fff7e6; border:1px solid #f0d99b; border-radius:8px; padding:5px 9px; margin-top:6px; line-height:1.4}
   .save-badge{display:inline-block; margin-top:5px; font-size:11px; font-weight:800; color:#fff; background:var(--green); padding:3px 9px; border-radius:20px}
   .bundle-per{display:block; margin-top:2px; font-size:11px; font-weight:700; color:var(--green); text-align:right}
-  .member-label{display:inline-block; margin-top:4px; font-size:11px; font-weight:700; color:var(--green); border:1.5px solid var(--green); padding:2px 7px; border-radius:20px}
   .per{font-size:12px; font-weight:600; color:var(--muted)}
   .section-head{font-size:11.5px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin:18px 2px 8px}
   .section-head.sale{color:var(--green)}
@@ -439,7 +438,7 @@
       <div class="tg-title">Staple item</div>
       <label class="switch"><input type="checkbox" id="f-staple"><span class="slider"></span></label>
     </div>
-    <p class="hint">Get a heads-up when a deal has 3 days or fewer left and you haven't bought this yet.</p>
+    <p class="hint">You'll get a reminder 3 days before a deal expires if this item isn't in your purchases yet.</p>
   </div>
 
   <div id="price-history"></div>
@@ -946,8 +945,7 @@ function card(i){
       // Normal deal: per-weight → Save %, per-each → Save $X
       const saveBadge = save>0 ? (isPerWeight ? `Save ${savePct}%` : `Save ${fmt$(save)}`) : '';
       if(memberPrice !== null){
-        priceCol = `<div class="price-wrap"><span class="price-was">${fmt$(cur)}${usuf}</span><span class="price-now">${fmt$(memberPrice)}${usuf}</span></div>`
-          + `<span class="member-label">Member</span>`
+        priceCol = `<div class="price-wrap">${base > memberPrice ? `<span class="price-was">${fmt$(base)}${usuf}</span>` : ''}<span class="price-now">${fmt$(memberPrice)}${usuf}</span></div>`
           + (saveBadge ? `<span class="save-badge">${saveBadge}</span>` : '');
       } else {
         priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
