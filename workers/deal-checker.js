@@ -70,8 +70,8 @@ function titleCase(s) {
   const unitCase = { l:'L', ml:'ml', g:'g', kg:'kg', oz:'oz', lb:'lb', lbs:'lbs', ct:'ct', pk:'pk', pack:'pack' };
   return (s || '').replace(/[A-Za-z0-9][A-Za-z0-9'\u2018\u2019]*/g, w => {
     const m = w.match(units);
-    if (m) return (m[1] || '') + (unitCase[m[2].toLowerCase()] || m[2].toLowerCase());
-    if (/^[A-Z][A-Z0-9]*$/.test(w) && w.length <= 3) return w;
+    if (m && (m[1] || m[2].length > 1)) return (m[1] || '') + (unitCase[m[2].toLowerCase()] || m[2].toLowerCase());
+    if (/^[A-Z][A-Z0-9]*$/.test(w) && w.length <= 3 && /^[^AEIOUaeiou]+$/.test(w)) return w;
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   });
 }
