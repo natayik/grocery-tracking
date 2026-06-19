@@ -257,6 +257,7 @@
   .deal-warn{font-size:12px; font-weight:600; color:#8a5a00; background:#fff7e6; border:1px solid #f0d99b; border-radius:8px; padding:5px 9px; margin-top:6px; line-height:1.4}
   .save-badge{display:inline-block; margin-top:5px; font-size:11px; font-weight:800; color:#fff; background:var(--green); padding:3px 9px; border-radius:20px}
   .bundle-per{display:block; margin-top:2px; font-size:11px; font-weight:700; color:var(--green); text-align:right}
+  .member-label{display:inline-block; margin-top:4px; font-size:11px; font-weight:700; color:var(--green); border:1.5px solid var(--green); padding:2px 7px; border-radius:20px}
   .per{font-size:12px; font-weight:600; color:var(--muted)}
   .section-head{font-size:11.5px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin:18px 2px 8px}
   .section-head.sale{color:var(--green)}
@@ -340,6 +341,7 @@
     </div>
     <div class="page-menu" id="page-menu">
       <button id="m-watch" onclick="addToWatchlist()">Add to watchlist</button>
+      <button id="m-hidecycle" onclick="hideCycle()">Hide for this sale cycle</button>
       <button id="m-notmatch" onclick="notAMatch()">Not a match</button>
     </div>
   </div>
@@ -431,6 +433,14 @@
 
   <label>Category</label>
   <select id="f-category"></select>
+
+  <div id="staple-wrap">
+    <div class="toggle-row" style="margin-top:14px">
+      <div class="tg-title">Staple item</div>
+      <label class="switch"><input type="checkbox" id="f-staple"><span class="slider"></span></label>
+    </div>
+    <p class="hint">Get a heads-up when a deal has 3 days or fewer left and you haven't bought this yet.</p>
+  </div>
 
   <div id="price-history"></div>
   </div>
@@ -743,6 +753,12 @@ function addToWatchlist(){
   activeTab='watchlist'; switchTab('watchlist');
   ensureCategories();
 }
+function hideCycle(){
+  if(!editId) return;
+  const i=state.items.find(x=>x.id===editId); if(!i || !i.deal) return;
+  i.hiddenCycle = i.deal.validTo || '';
+  save(); closeSheet(); render();
+}
 function notAMatch(){
   if(!editId) return;
   const i=state.items.find(x=>x.id===editId); if(!i || !i.deal) return;
@@ -859,8 +875,8 @@ function render(){
     return;
   }
 
-  const dealItems = list.filter(i=>i.deal);
-  const rest = list.filter(i=>!i.deal);
+  const dealItems = list.filter(i=>i.deal && i.hiddenCycle !== (i.deal.validTo || ''));
+  const rest = list.filter(i=>!i.deal || i.hiddenCycle === (i.deal.validTo || ''));
   let html='';
   if(dealsChecking) html += `<div class="meta" style="text-align:center; padding:4px 0 8px">Checking deals…</div>`;
   if(dealItems.length){
@@ -890,6 +906,7 @@ function card(i){
   const store = `<span class="store-chip" style="background:${sc.color}">${esc(sc.label)}</span>`;
   const qty = i.qty>1 ? ` ×${i.qty}` : '';
   const nm = esc(titleCase(i.name));
+  const stapleTag = (i.kind === 'watch' && i.staple) ? '<span style="color:var(--brand);font-size:12px;font-weight:800;vertical-align:1px;margin-right:2px">★</span>' : '';
   const photo = imageCache[i.id] || (i.deal && i.deal.image) || '';
   // Empty thumbnails get a category emoji so every card keeps the same left rhythm.
   const thumb = photo
@@ -911,8 +928,10 @@ function card(i){
     const bm = storyText.match(/(\d+)\s*(?:for|\/)\s*\$?([\d.]+)/i);
     const bCount = (bm && parseInt(bm[1])>=2) ? parseInt(bm[1]) : 0;
     const bTotal = bCount ? parseFloat(bm[2]) : 0;
+    const mm = storyText.match(/member\s*price\s*([\d.]+)/i);
+    const memberPrice = mm ? parseFloat(mm[1]) : null;
     // For bundles, deal.price is the bundle total — compare per-unit for pricier/save
-    const effectiveUnit = bCount>=2 ? bTotal/bCount : cur;
+    const effectiveUnit = bCount>=2 ? bTotal/bCount : (memberPrice !== null ? memberPrice : cur);
     const pricier = i.kind==='watch' && i.price>0 && effectiveUnit > i.price;
     // "Was" = the flyer's original if given, else your saved usual price.
     const base = i.kind==='purchase' ? (i.price||0) : (i.deal.original || i.price || 0);
@@ -926,8 +945,14 @@ function card(i){
     } else {
       // Normal deal: per-weight → Save %, per-each → Save $X
       const saveBadge = save>0 ? (isPerWeight ? `Save ${savePct}%` : `Save ${fmt$(save)}`) : '';
-      priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
-        + (saveBadge ? `<span class="save-badge">${saveBadge}</span>` : '');
+      if(memberPrice !== null){
+        priceCol = `<div class="price-wrap"><span class="price-was">${fmt$(cur)}${usuf}</span><span class="price-now">${fmt$(memberPrice)}${usuf}</span></div>`
+          + `<span class="member-label">Member</span>`
+          + (saveBadge ? `<span class="save-badge">${saveBadge}</span>` : '');
+      } else {
+        priceCol = `<div class="price-wrap">${base>cur?`<span class="price-was">${fmt$(base)}${usuf}</span>`:''}<span class="price-now">${fmt$(cur)}${usuf}</span></div>`
+          + (saveBadge ? `<span class="save-badge">${saveBadge}</span>` : '');
+      }
     }
     const ends = i.deal.validTo ? `Deal ends ${fmtDate(i.deal.validTo.slice(0,10))}` : '';
     // Date line: purchases pair the buy date with the deal end; whichever deadline binds drives the pill.
@@ -970,7 +995,7 @@ function card(i){
 
   const inner = `
       <div class="card-top">
-        <div class="card-head">${store}<h3>${nm}${qty}</h3></div>
+        <div class="card-head">${store}<h3>${stapleTag}${nm}${qty}</h3></div>
         <div class="price-col">${priceCol}</div>
       </div>
       ${dateLine}${daysPill}${meta}${renameBanner}${warnBanner}`;
@@ -1007,6 +1032,7 @@ function setKind(k){
   document.getElementById('purchase-bottom').style.display = isP?'block':'none';
   document.getElementById('qty-wrap').style.display = isP?'block':'none';
   document.getElementById('watchper-wrap').style.display = isP?'none':'block';
+  document.getElementById('staple-wrap').style.display = isP?'none':'block';
   document.getElementById('lbl-price').textContent = isP?'Price paid ($)':'Regular price ($)';
 }
 function updateQtyVisibility(){} // quantity is purchase-only and always shown; kept as a no-op for older callers
@@ -1034,6 +1060,7 @@ function openSheet(){
   document.getElementById('f-punit').value='each';
   document.getElementById('f-size').value='';
   document.getElementById('f-discount').value='';
+  document.getElementById('f-staple').checked=false;
   formImage='keep'; renderImgControl();
   document.getElementById('label-scan-status').textContent='';
   document.getElementById('f-category').value='';
@@ -1060,6 +1087,7 @@ function editItem(id){
   document.getElementById('f-punit').value=i.unit||'each';
   document.getElementById('f-size').value=i.size||'';
   document.getElementById('f-discount').value=i.discount||'';
+  document.getElementById('f-staple').checked=!!i.staple;
   formImage='keep'; renderImgControl();
   document.getElementById('label-scan-status').textContent='';
   document.getElementById('f-category').value=i.category||'';
@@ -1067,6 +1095,7 @@ function editItem(id){
   document.getElementById('delete-btn').style.display='block';
   const canWatch = i.kind==='purchase', canNot = !!i.deal;
   document.getElementById('m-watch').style.display = canWatch ? 'block' : 'none';
+  document.getElementById('m-hidecycle').style.display = canNot ? 'block' : 'none';
   document.getElementById('m-notmatch').style.display = canNot ? 'block' : 'none';
   document.getElementById('page-menu-btn').style.display = (canWatch||canNot) ? 'block' : 'none';
   document.getElementById('page-menu').classList.remove('open');
@@ -1108,6 +1137,7 @@ function saveItem(){
     rec.discount = parseFloat(document.getElementById('f-discount').value)||0;
   } else {
     rec.priceUnit = document.getElementById('f-unit').value;
+    rec.staple = document.getElementById('f-staple').checked;
   }
   const prev = editId ? state.items.find(x=>x.id===editId) : null;
   // Preserve the live deal + any rejected-match memory across edits.
