@@ -83,7 +83,7 @@ function buildBody(names) {
   for (let i = 1; i < names.length; i++) {
     const candidate = [...shown, names[i]].join(', ');
     const full = i < names.length - 1 ? candidate + ' and more' : candidate;
-    if (full.length <= 60) shown.push(names[i]);
+    if (full.length <= 120) shown.push(names[i]);
     else break;
   }
   return shown.length < names.length ? shown.join(', ') + ' and more' : shown.join(', ');
