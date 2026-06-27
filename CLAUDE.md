@@ -62,7 +62,7 @@ STORES = {
 To add a store: add an entry here — chips, toggles, and filters all pick it up automatically.
 
 ### Categories
-`['Produce','Meat & Seafood','Dairy & Eggs','Bakery','Pantry','Frozen','Snacks','Beverages','Household','Personal Care','Other']`
+`['Produce','Meat','Seafood','Dairy, Eggs & Tofu','Bakery','Pantry','Prepackaged & Frozen Food','Snacks','Beverages','Household','Personal Care','Other']`
 
 ---
 
@@ -144,6 +144,14 @@ Yi is a UX designer, not a developer. She does not write or read code.
 | 2026-06-16 | Updated both Gemini prompts (BATCH_PROMPT, ITEM_PROMPT) to always return Traditional Chinese (繁體中文), never Simplified |
 | 2026-06-16 | Added brand-only guard to `nameScore` — rejects matches where both sides have ≥2 unique non-overlapping tokens with zero intersection |
 | 2026-06-16 | Added `parseSize` + size mismatch penalty in `findDeal` — penalises -0.4 when item and flyer sizes parse to same unit family but differ by >15% |
+| 2026-06-17 | Fixed case-sensitive rename comparison in `dealBannerText` — "use this name" link now hidden when names differ only in casing |
+| 2026-06-18 | Split "Meat & Seafood" → "Meat" + "Seafood"; renamed "Frozen" → "Prepackaged & Frozen Food"; renamed "Dairy & Eggs" → "Dairy, Eggs & Tofu" |
+| 2026-06-18 | Fixed titleCase all-caps guard (OIL/TEA were preserved as ALL CAPS — now vowel check limits guard to true abbreviations like PC, MSG, F, G) |
+| 2026-06-18 | renameToFlyer now stores titleCase(n) so flyer-renamed items always display in proper case |
+| 2026-06-18 | Added stripSizeFromStr() — rename banner now strips weight from displayed flyer name |
+| 2026-06-18 | Save badge changed from dollar amount to percentage (Save 23% instead of Save $3.00/kg) |
+| 2026-06-18 | Bundle deal note: parses deal.story for "2 for $X" patterns and shows per-unit breakdown on card |
+| 2026-06-18 | Strengthened Traditional Chinese requirement in both scan prompts — explicitly bans Simplified Chinese |
 
 ## Planned / discussed future iterations
 - Refine match thresholds as more mismatch examples are collected (e.g. brand-only false positives like Lee Kum Kee Soy Sauce ↔ Chuhou Paste)

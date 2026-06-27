@@ -905,7 +905,7 @@ function card(i){
   const store = `<span class="store-chip" style="background:${sc.color}">${esc(sc.label)}</span>`;
   const qty = i.qty>1 ? ` ×${i.qty}` : '';
   const nm = esc(titleCase(i.name));
-  const stapleTag = (i.kind === 'watch' && i.staple) ? '<span style="color:var(--brand);font-size:12px;font-weight:800;vertical-align:1px;margin-right:2px">★</span>' : '';
+  const stapleTag = (i.kind === 'watch' && i.staple) ? '<span style="color:#f5a623;font-size:12px;font-weight:800;vertical-align:1px;margin-right:2px">★</span>' : '';
   const photo = imageCache[i.id] || (i.deal && i.deal.image) || '';
   // Empty thumbnails get a category emoji so every card keeps the same left rhythm.
   const thumb = photo
@@ -1138,6 +1138,10 @@ function saveItem(){
     rec.staple = document.getElementById('f-staple').checked;
   }
   const prev = editId ? state.items.find(x=>x.id===editId) : null;
+  // categoryManual: true only if user explicitly picked a category (new item) or changed it (edit).
+  rec.categoryManual = prev
+    ? (prev.categoryManual || rec.category !== (prev.category || ''))
+    : !!rec.category;
   // Preserve the live deal + any rejected-match memory across edits.
   if(prev){ if(prev.deal) rec.deal=prev.deal; if(prev.rejectedFlyers) rec.rejectedFlyers=prev.rejectedFlyers; }
   const priceChanged = !prev || prev.price!==rec.price;
@@ -1823,7 +1827,7 @@ function keywordCategory(name){
   const n=(name||'').toLowerCase();
   const map=[
     [/(milk|cheese|yogurt|yoghurt|\begg|butter|\bcream\b|tofu|kefir|oat milk|soy milk|almond milk)/,'Dairy, Eggs & Tofu'],
-    [/(salmon|tuna|shrimp|crab|lobster|squid|scallop|seafood|prawn|clam|mussel|tilapia|halibut|cod|snapper|herring|mackerel|anchov)|\bfish(?! sauce)/,'Seafood'],
+    [/(salmon|tuna|shrimp|crab|lobster|squid|scallop|seafood|prawn|clam|mussel|tilapia|halibut|cod|snapper|herring|mackerel|anchov|oyster(?! sauce)|\bfish(?! sauce))/,'Seafood'],
     [/(chicken|beef|pork|tenderloin|breast|sausage|bacon|\bmeat\b|lamb|ham|turkey|duck|\brib\b|ribs\b|brisket|ground|steak|chop\b|loin\b)/,'Meat'],
     [/(apple|banana|lettuce|tomato|onion|pepper|spinach|broccoli|bok choy|cabbage|fruit|vegetable|produce|berr|orange|grape|carrot|potato|gai lan|napa|kale|celery|zucchini|avocado|mango|melon|\bcorn\b|mushroom|garlic|ginger|lemon|lime|peach|pear|plum|cherry|kiwi|pineapple|watermelon|asparagus|artichoke|beet|radish|daikon)/,'Produce'],
     [/(bread|\bbun\b|bagel|bakery|muffin|cake|pastry|tortilla|croissant|baguette|\bloaf\b|pita|scone|waffle)/,'Bakery'],
@@ -1870,7 +1874,7 @@ async function aiCategorize(names){
 }
 let categorizing=false;
 async function ensureCategories(){
-  const todo=state.items.filter(i=>!i.category);
+  const todo=state.items.filter(i=>!i.category || (i.category==='Other' && !i.categoryManual));
   if(!todo.length || categorizing) return;
   categorizing=true;
   let cats=null;

@@ -16,9 +16,7 @@ self.addEventListener('notificationclick', (event) => {
     clients.matchAll({ type: 'window' }).then((wins) => {
       const win = wins.find(w => 'focus' in w);
       if (win) {
-        win.postMessage({ type: 'refresh-deals' });
-        win.focus();
-        return;
+        return win.focus().then(() => win.postMessage({ type: 'refresh-deals' }));
       }
       return clients.openWindow('/?refresh=deals');
     })
