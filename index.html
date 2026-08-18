@@ -681,6 +681,7 @@ async function onLabelPicked(e){
 }
 function fillCurrentForm(d){
   const setIfEmpty=(id,val)=>{ const el=document.getElementById(id); if(val && el && !el.value) el.value=val; };
+  const nameWasEmpty=!document.getElementById('f-name').value;
   setIfEmpty('f-name', d.name);
   setIfEmpty('f-size', d.size);
   if(d.code && !document.getElementById('f-code').value){ setStore('Costco'); document.getElementById('f-code').value=d.code; }
@@ -693,6 +694,15 @@ function fillCurrentForm(d){
   } else {
     if(d.price && !document.getElementById('f-price').value) document.getElementById('f-price').value=d.price;
     document.getElementById('f-unit').value=u; updateQtyVisibility();
+  }
+  if(nameWasEmpty && d.name){
+    const linkEl=document.getElementById('f-link');
+    if(linkEl && !linkEl.value){
+      lookupProductLink(d.name, d.store||form.store||'').then(function(link){
+        const el=document.getElementById('f-link');
+        if(el && !el.value && link) el.value=link;
+      });
+    }
   }
 }
 function removeFormImage(){ formImage='remove'; renderImgControl(); }
@@ -1955,6 +1965,7 @@ render();
 ensureCategories();
 loadAllImages().then(render);
 setTimeout(()=>{ const last=state.lastDealCheck||0; if(getPostal() && Date.now()-last > 24*3600*1000) checkDeals(); }, 200);
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible'){ const last=state.lastDealCheck||0; if(getPostal() && Date.now()-last > 3600*1000) checkDeals(); } });
 syncPullOnOpen();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', e => {

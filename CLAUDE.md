@@ -152,6 +152,8 @@ Yi is a UX designer, not a developer. She does not write or read code.
 | 2026-06-18 | Save badge changed from dollar amount to percentage (Save 23% instead of Save $3.00/kg) |
 | 2026-06-18 | Bundle deal note: parses deal.story for "2 for $X" patterns and shows per-unit breakdown on card |
 | 2026-06-18 | Strengthened Traditional Chinese requirement in both scan prompts — explicitly bans Simplified Chinese |
+| 2026-06-26 | Fixed link search missing from fillCurrentForm — "Scan label to fill" now auto-populates the link field |
+| 2026-07-04 | Added visibilitychange listener — app now auto-checks deals when returning to foreground if last check was >1h ago (PWA resume doesn't re-run page load) |
 
 ## Planned / discussed future iterations
 - Refine match thresholds as more mismatch examples are collected (e.g. brand-only false positives like Lee Kum Kee Soy Sauce ↔ Chuhou Paste)
